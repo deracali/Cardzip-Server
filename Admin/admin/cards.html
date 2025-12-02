@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gift Cards - Cardzip Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+  // Auth check
+  const adminToken = localStorage.getItem("adminToken");
+  if (!adminToken) {
+    window.location.href = "https://cardzip-admin.netlify.app/signin.html";
+  }
+  </script>
+</head>
+<body class="bg-gray-50">
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 flex justify-between items-center py-4">
+      <h1 class="text-2xl font-bold text-gray-900">Gift Cards</h1>
+      <div class="flex items-center space-x-4">
+        <a href="users.html" class="text-blue-600">Users</a>
+        <a href="cards.html" class="text-blue-600 font-semibold">Gift Cards</a>
+        <button id="logoutButton" class="px-3 py-1 bg-red-500 text-white rounded">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 py-8" id="content">
+    <p class="text-gray-600">Loading gift cards...</p>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    const API_BASE = "https://trader-sr5j-0k7o.onrender.com/api/gift-cards";
+    let giftCards = [];
+
+    // Fetch cards
+    async function loadGiftCards() {
+      try {
+        const res = await fetch(`${API_BASE}/get`);
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const payload = await res.json();
+        const arr = Array.isArray(payload.data) ? payload.data : [];
+
+        giftCards = arr.map(gc => ({
+          id: gc._id,
+          type: gc.type,
+          amount: gc.amount,
+          currency: gc.currency,
+          cardNumbers: gc.cardNumbers || [],
+          imageUrls: Array.isArray(gc.imageUrls) ? gc.imageUrls : (gc.imageUrl ? [gc.imageUrl] : []),
+          ngnAmount: gc.ngnAmount,
+          exchangeRate: gc.exchangeRate,
+          paymentMethod: gc.paymentMethod || "",
+          walletAddress: gc.walletAddress || "",
+          user: typeof gc.user === "object" ? gc.user?.name || "" : gc.user || "",
+          status: (gc.status || "").toLowerCase().trim(),
+          companyFeedback: gc.companyFeedback || "",
+          createdAt: gc.createdAt ? new Date(gc.createdAt).toLocaleString() : "—"
+        }));
+
+        renderCards();
+      } catch (err) {
+        console.error("Could not load gift cards:", err);
+        document.getElementById("content").innerHTML =
+          `<p class="text-red-500">Failed to load gift cards.</p>`;
+      }
+    }
+
+    // Render cards
+    function renderCards() {
+      const pending = giftCards.filter(c => c.status === "pending");
+      const content = document.getElementById("content");
+
+      if (!pending.length) {
+        content.innerHTML = `<p class="text-gray-600">No pending gift cards.</p>`;
+        return;
+      }
+
+      content.innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          ${pending.map(c => `
+            <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-400">
+              <div class="flex justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">${c.type} Gift Card</h3>
+                <span class="px-3 py-1 text-sm rounded-full bg-yellow-100 text-yellow-800">${c.status}</span>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
+                <div><span class="text-gray-600">Amount:</span> <span class="font-medium">$${c.amount} ${c.currency}</span></div>
+                <div><span class="text-gray-600">NGN:</span> <span class="font-medium">₦${c.ngnAmount?.toLocaleString() || "0"}</span></div>
+                <div><span class="text-gray-600">Rate:</span> <span class="font-medium">₦${c.exchangeRate?.toLocaleString() || "—"}</span></div>
+                <div><span class="text-gray-600">User:</span> <span class="font-medium">${c.user || "—"}</span></div>
+                <div><span class="text-gray-600">Created:</span> <span class="font-medium">${c.createdAt}</span></div>
+              </div>
+
+              <div class="flex space-x-2 mb-4">
+                ${c.imageUrls.map(url => `
+                  <div class="relative">
+                    <img src="${url}" class="w-20 h-20 object-contain rounded border" />
+                    <button onclick="copyImageToClipboard('${url}')"
+                            class="absolute bottom-1 right-1 bg-gray-800 text-white p-1 rounded text-xs">
+                      <i data-lucide="clipboard-copy" class="w-3 h-3"></i>
+                    </button>
+
+
+                  </div>
+                `).join("")}
+              </div>
+
+              <div class="mt-4">
+                <label class="block text-sm font-medium text-gray-700">Company Feedback</label>
+                <textarea id="feedback-${c.id}" class="mt-1 block w-full border rounded p-2 text-sm">${c.companyFeedback || ""}</textarea>
+                <button onclick="updateCompanyFeedback('${c.id}')" class="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm">Save Feedback</button>
+              </div>
+
+              <div class="flex justify-between items-center pt-4 border-t mt-4">
+                <button onclick="updateCardStatus('${c.id}','successful')" class="px-4 py-2 bg-green-500 text-white rounded">Mark Success</button>
+                <button onclick="updateCardStatus('${c.id}','failed')" class="px-4 py-2 bg-red-500 text-white rounded">Mark Failed</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+
+      lucide.createIcons();
+    }
+
+    // Copy Image
+    async function copyImageToClipboard(url) {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        // Mobile: fallback to URL copy only
+        try {
+          await navigator.clipboard.writeText(url);
+          alert('Image URL copied (mobile).');
+        } catch {
+          alert('Failed to copy image URL.');
+        }
+        return;
+      }
+
+      // Desktop: try to copy the image
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = url;
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+        await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+        alert('Image copied to clipboard!');
+      } catch (err) {
+        console.warn('Image copy failed, falling back to URL copy:', err);
+        try {
+          await navigator.clipboard.writeText(url);
+          alert('Image URL copied instead.');
+        } catch {
+          alert('Failed to copy image or URL.');
+        }
+      }
+    }
+
+    // Update status
+    async function updateCardStatus(cardId, newStatus) {
+      try {
+        const res = await fetch(`${API_BASE}/update/${cardId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus })
+        });
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        alert(`Status updated to ${newStatus.toUpperCase()}`);
+        loadGiftCards();
+      } catch (err) {
+        console.error("Failed to update:", err);
+        alert("Could not update status.");
+      }
+    }
+
+    // Update company feedback
+    async function updateCompanyFeedback(cardId) {
+      const feedback = document.getElementById(`feedback-${cardId}`).value;
+      try {
+        const res = await fetch(`${API_BASE}/update/${cardId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyFeedback: feedback })
+        });
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        alert("Company feedback saved.");
+      } catch (err) {
+        console.error("Failed to update feedback:", err);
+        alert("Could not save feedback.");
+      }
+    }
+
+    // Auto-refresh
+    loadGiftCards();
+    setInterval(loadGiftCards, 10000);
+
+    // Logout
+    document.getElementById("logoutButton").addEventListener("click", () => {
+      localStorage.removeItem("adminToken");
+      window.location.href = "signin.html";
+    });
+  </script>
+
+
+
+</body>
+</html>

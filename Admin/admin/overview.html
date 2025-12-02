@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard - Overview</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: sans-serif; }
+    .tab-button.active { border-bottom-color: #3B82F6; color: #3B82F6; }
+  </style>
+</head>
+<body class="bg-gray-50">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 flex justify-between items-center py-4">
+      <h1 class="text-2xl font-bold text-gray-900">Gift Cards Admin Dashboard</h1>
+      <div class="flex items-center space-x-4">
+        <div class="relative">
+          <i data-lucide="bell" class="w-6 h-6 text-gray-600 cursor-pointer" id="notif-icon"></i>
+          <span id="notif-count" class="hidden absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">0</span>
+        </div>
+        <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold"><a href="form.html">C</a></div>
+        <div><a href="allcards.html">Requests</a></div>
+        <button id="logoutButton" class="btn-logout">Logout</button>
+        <div><a href="crypto.html">Crypto</a></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Overview Content -->
+  <main class="max-w-7xl mx-auto px-4 py-8" id="overview-content"></main>
+
+  <script>
+    // Protect route
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) {
+      window.location.href = 'https://cardzip-admin.netlify.app/signin.html';
+    }
+
+    lucide.createIcons();
+
+    const overviewContent = document.getElementById('overview-content');
+
+    let users = [];
+    let giftCards = [];
+
+    const API_USERS = 'https://trader-sr5j-0k7o.onrender.com/api/users/get';
+    const API_CARDS = 'https://trader-sr5j-0k7o.onrender.com/api/gift-cards/get';
+
+    // Fetch users
+    async function loadUsers() {
+      try {
+        const res = await fetch(API_USERS);
+        const data = await res.json();
+        users = data || [];
+        renderOverview();
+      } catch (err) {
+        console.error("Failed to load users", err);
+      }
+    }
+
+    // Fetch cards
+    async function loadGiftCards() {
+      try {
+        const res = await fetch(API_CARDS);
+        const payload = await res.json();
+        giftCards = Array.isArray(payload.data) ? payload.data : [];
+        renderOverview();
+      } catch (err) {
+        console.error("Failed to load gift cards", err);
+      }
+    }
+
+    function statCard(icon, label, value, desc, color) {
+      return `
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="flex items-center space-x-4">
+            <div class="p-3 rounded-full" style="background:${color}20">
+              <i data-lucide="${icon}" class="w-6 h-6" style="color:${color}"></i>
+            </div>
+            <div>
+              <p class="text-sm text-gray-500">${label}</p>
+              <p class="text-xl font-bold">${value}</p>
+              <p class="text-xs text-gray-400">${desc}</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderOverview() {
+      const totalUsers = users.length;
+      const totalCards = giftCards.length;
+
+      const totalAmountTraded = giftCards
+        .filter(c => c.status === 'successful' && typeof c.amount === 'number')
+        .reduce((sum, c) => sum + c.amount, 0);
+
+      const totalRevenue = giftCards
+        .filter(c => c.status === 'successful' && typeof c.amount === 'number')
+        .reduce((sum, c) => sum + (c.amount * 40), 0);
+
+      const today = new Date();
+      const dailyRevenue = giftCards
+        .filter(c => c.status === 'successful' && new Date(c.createdAt).toDateString() === today.toDateString())
+        .reduce((sum, c) => sum + (c.amount * 40), 0);
+
+      const pendingCards = giftCards.filter(c => c.status === 'pending').length;
+      const latest = giftCards.slice(0, 3);
+
+      overviewContent.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          ${statCard('users', 'Total Users', totalUsers, '+12% this month', '#3B82F6')}
+          ${statCard('credit-card', 'Gift Cards', totalCards, '+8% this week', '#10B981')}
+          ${statCard('trending-up', 'Total Traded', '$' + totalAmountTraded.toLocaleString(), 'All-time', '#6366F1')}
+          ${statCard('dollar-sign', 'Total Revenue', '₦' + totalRevenue.toLocaleString(), '+15% this month', '#F59E0B')}
+          ${statCard('clock', 'Pending Cards', pendingCards, 'Awaiting review', '#EF4444')}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          ${statCard('calendar', 'Daily Revenue', '₦' + dailyRevenue.toLocaleString(), 'Today', '#3B82F6')}
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Latest Gift Cards</h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            ${latest.map(card => `
+              <div class="border rounded-lg p-4 hover:shadow-md">
+                <div class="flex justify-between mb-2">
+                  <h3 class="font-semibold text-gray-900">${card.type}</h3>
+                  <span class="px-2 py-1 text-xs rounded-full bg-gray-200">${card.status}</span>
+                </div>
+                <p class="text-sm text-gray-600 mb-2">User: ${card.user || '—'}</p>
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-lg font-bold text-green-600">$${card.amount ?? '0'}</span>
+                  <span class="text-sm text-gray-500">₦${(card.amount * 40).toLocaleString()}</span>
+                </div>
+                <p class="text-xs text-gray-500">${card.createdAt}</p>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      lucide.createIcons();
+    }
+
+    // Refresh every 10s
+    setInterval(() => {
+      loadUsers();
+      loadGiftCards();
+    }, 10000);
+
+    loadUsers();
+    loadGiftCards();
+
+  </script>
+</body>
+</html>

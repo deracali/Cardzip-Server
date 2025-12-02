@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gift Cards Admin Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+  // Check if adminToken exists
+  const adminToken = localStorage.getItem('adminToken');
+
+  if (!adminToken) {
+    // Redirect to sign-in page if not logged in
+    window.location.href = 'https://cardzip-admin.netlify.app/signin.html';
+  }
+</script>
+
+  <style>
+    body { font-family: sans-serif; }
+    .tab-button.active { border-bottom-color: #3B82F6; color: #3B82F6; }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 flex justify-between items-center py-4">
+      <h1 class="text-2xl font-bold text-gray-900">Gift Cards Admin Dashboard</h1>
+      <div class="flex items-center space-x-4">
+        <div class="relative">
+          <i data-lucide="bell" class="w-6 h-6 text-gray-600 cursor-pointer" id="notif-icon"></i>
+          <span id="notif-count" class="hidden absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">0</span>
+        </div>
+        <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold"><a href="form.html">C</a></div>
+        <div class=""><a href="allcards.html">Requests</a></div>
+        <button id="logoutButton" class="btn-logout">
+  Logout
+</button>
+
+        <div class=""><a href="crypto.html">Crypto</a></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="bg-white border-b">
+    <div class="max-w-7xl mx-auto px-4 flex space-x-8">
+      <button class="tab-button py-4 px-1 border-b-2 font-medium text-sm" data-tab="overview">Overview</button>
+      <button class="tab-button py-4 px-1 border-b-2 font-medium text-sm" data-tab="users">Users</button>
+      <button class="tab-button py-4 px-1 border-b-2 font-medium text-sm" data-tab="cards">Gift Cards</button>
+      <!-- <button class="tab-button py-4 px-1 border-b-2 font-medium text-sm" data-tab="notifications">Notifications</button> -->
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 py-8" id="tab-content"></main>
+
+  <script>
+    lucide.createIcons();
+
+    const tabs = document.querySelectorAll('.tab-button');
+    const tabContent = document.getElementById('tab-content');
+
+ let users = []
+
+async function loadUsers() {
+  try {
+    const res = await fetch('https://trader-sr5j-0k7o.onrender.com/api/users/get')
+    if (!res.ok) throw new Error(`Server returned ${res.status}`)
+    const data = await res.json()
+    renderOverview();
+    // normalize to the shape our table now expects
+    users = data.map(u => ({
+      name:          u.name,
+      email:         u.email,
+      accountNumber: u.accountNumber || '—',
+      accountName:   u.accountName   || '—',
+      bankName:      u.bankName      || '—',
+      status:        u.status        || 'active'
+    }))
+
+    renderUsers()
+  }
+  catch (err) {
+    console.error('Could not load users:', err)
+    tabContent.innerHTML = `<p class="text-red-500">Failed to load users.</p>`
+  }
+}
+
+function renderUsers() {
+  tabContent.innerHTML = `
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Users</h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account #</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account Name</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bank</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            ${users.map(u => `
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.name}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${u.email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.accountNumber}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.accountName}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.bankName}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                  <span class="px-2 py-1 text-xs rounded-full ${
+                    u.status === 'premium'
+                      ? 'bg-purple-100 text-purple-800'
+                      : 'bg-green-100 text-green-800'
+                  }">${u.status}</span>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`
+}
+
+// Kick off loading on page/tab init
+loadUsers()
+
+
+
+const API_BASE = 'https://trader-sr5j-0k7o.onrender.com/api/gift-cards';
+
+// ====== In-Memory Store ======
+let giftCards = [];
+
+// ====== Fetch + Normalize ======
+async function loadGiftCards() {
+  try {
+    const res = await fetch(`${API_BASE}/get`);
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+
+    const payload = await res.json();
+    const arr = Array.isArray(payload.data) ? payload.data : [];
+
+
+ renderOverview();
+    giftCards = arr.map(gc => {
+      const bank = gc.bankDetails || {};
+      const referrerBank = gc.referrerBankDetails || {};
+
+      // Normalize cardNumbers: could be ['abc'] or [{ type: 'abc'}] or single string
+      let cardNumbers = [];
+      if (Array.isArray(gc.cardNumbers)) {
+        cardNumbers = gc.cardNumbers.map(n => (typeof n === 'string' ? n : (n.type || n.number || String(n))));
+      } else if (typeof gc.cardNumbers === 'string' && gc.cardNumbers.trim()) {
+        cardNumbers = [gc.cardNumbers];
+      } else if (gc.cardNumber) {
+        // fallback single field
+        cardNumbers = [gc.cardNumber];
+      }
+
+      // Normalize imageUrls: backend might return imageUrls (array) or imageUrl (single)
+      let imageUrls = [];
+      if (Array.isArray(gc.imageUrls)) imageUrls = gc.imageUrls.slice();
+      else if (Array.isArray(gc.imageUrl)) imageUrls = gc.imageUrl.slice();
+      else if (typeof gc.imageUrls === 'string' && gc.imageUrls.trim()) imageUrls = [gc.imageUrls];
+      else if (typeof gc.imageUrl === 'string' && gc.imageUrl.trim()) imageUrls = [gc.imageUrl];
+
+      return {
+        id: gc._id,
+        type: gc.type,
+        amount: gc.amount,
+        currency: gc.currency,
+        cardNumbers,            // normalized array of strings
+        imageUrls,              // normalized array of urls
+        ngnAmount: gc.ngnAmount,
+        exchangeRate: gc.exchangeRate,
+        paymentMethod: gc.paymentMethod || '',
+        cryptoPayout: gc.cryptoPayout || '',
+        walletAddress: gc.walletAddress || '',
+        user: typeof gc.user === 'object' ? gc.user?.name || '' : gc.user || '',
+        status: (gc.status || '').toLowerCase().trim(),
+        userDescription: gc.userDescription || '',
+        companyFeedback: gc.companyFeedback || '',
+        read: gc.read,
+        readCount: gc.readCount || 0,
+        phoneNumber: gc.phoneNumber || '',
+        createdAt: gc.createdAt ? new Date(gc.createdAt).toLocaleString() : '—',
+        bankDetails: {
+          bankName: bank.bankName || '',
+          accountName: bank.accountName || '',
+          accountNumber: bank.accountNumber || ''
+        },
+        referrerBankDetails: {
+          bankName: referrerBank.bankName || '',
+          accountName: referrerBank.accountName || '',
+          accountNumber: referrerBank.accountNumber || ''
+        }
+      };
+    });
+
+    renderCards();
+  } catch (err) {
+    console.error('Could not load gift cards:', err);
+    tabContent.innerHTML = `<p class="text-red-500">Failed to load gift cards.</p>`;
+  }
+}
+
+// ====== Clipboard Helper (Canvas → PNG) ======
+async function copyImageToClipboard(url) {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // Mobile: fallback to URL copy only
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Image URL copied (mobile).');
+    } catch {
+      alert('Failed to copy image URL.');
+    }
+    return;
+  }
+
+  // Desktop: try to copy the image
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+    alert('Image copied to clipboard!');
+  } catch (err) {
+    console.warn('Image copy failed, falling back to URL copy:', err);
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Image URL copied instead.');
+    } catch {
+      alert('Failed to copy image or URL.');
+    }
+  }
+}
+
+// ====== Update Helpers ======
+async function updateCardStatus(cardId, newStatus) {
+  try {
+    const res = await fetch(`${API_BASE}/update/${cardId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    // locally mark it read + bump count
+    const card = giftCards.find(c => c.id === cardId);
+    if (card) {
+      card.status = newStatus;
+      card.read = true;
+      card.readCount += 1;
+    }
+    renderCards();
+     alert(`Status updated to “${newStatus.toUpperCase()}” successfully.`);
+  } catch (err) {
+    console.error('Failed to update status:', err);
+    alert('Could not update status.');
+  }
+}
+
+async function updateCompanyFeedback(cardId, feedback) {
+  try {
+    const res = await fetch(`${API_BASE}/update/${cardId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyFeedback: feedback })
+    });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    // locally mark it read + bump count
+    const card = giftCards.find(c => c.id === cardId);
+    if (card) {
+      card.companyFeedback = feedback;
+      card.read = true;
+      card.readCount += 1;
+    }
+    renderCards();
+     alert('Company feedback updated successfully.');
+  } catch (err) {
+    console.error('Failed to update feedback:', err);
+    alert('Could not update feedback.');
+  }
+}
+
+// ====== Rendering ======
+function renderCards() {
+  const pending = giftCards.filter(c => c.status === 'pending');
+
+  if (!pending.length) {
+    tabContent.innerHTML = `<p class="text-gray-600">No pending gift cards.</p>`;
+    return;
+  }
+
+  tabContent.innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      ${pending.map(c => {
+        // Determine user display name fallback to bankDetails.accountName if user is null
+       const userName = c.user || c.bankDetails?.accountName || '—';
+
+
+        // Prepare bank details display if available
+        const bankDetailsHTML = c.bankDetails ? `
+          <div class="mb-4 p-3 border rounded bg-gray-50 text-sm text-gray-700">
+            <strong>Bank Details:</strong><br />
+            Bank Name: ${c.bankDetails.bankName ?? '—'}<br />
+            Account Name: ${c.bankDetails.accountName ?? '—'}<br />
+            Account Number: ${c.bankDetails.accountNumber ?? '—'}
+          </div>
+        ` : '';
+
+
+          const referrerBank = c.referrerBankDetails || {};
+      const referrerBankDetailsHTML = c.referrerBankDetails ? `
+        <div class="mb-4 p-3 border rounded bg-gray-50 text-sm text-gray-700">
+          <strong>Referrer Bank Details:</strong><br />
+          Bank Name: ${referrerBank.bankName ?? '—'}<br />
+          Account Name: ${referrerBank.accountName ?? '—'}<br />
+          Account Number: ${referrerBank.accountNumber ?? '—'}
+        </div>
+      ` : '';
+
+
+      const referrerAmount = (typeof c.ngnAmount === 'number') ? (c.ngnAmount * 0.01) : 0;
+const referrerAmountHTML = `
+  <div class="mb-4 text-sm text-gray-700">
+    <strong>Referrer Amount (1% NGN):</strong> ₦${referrerAmount.toLocaleString()}
+  </div>
+`;
+
+        return `
+          <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg border-l-4 ${getStatusBorderColor(c.status)}">
+
+            <div class="flex justify-between mb-4">
+              <h3 class="text-lg font-semibold text-gray-900">${c.type} Gift Card</h3>
+              <span class="px-3 py-1 text-sm rounded-full ${getStatusColor(c.status)}">
+                ${c.status.toUpperCase()}
+              </span>
+            </div>
+
+           <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
+  <div><span class="text-gray-600">Amount:</span> <span class="font-medium text-green-600">$${c.amount ?? '0'} ${c.currency ?? ''}</span></div>
+  <div><span class="text-gray-600">NGN Amount:</span> <span class="font-medium">₦${(typeof c.ngnAmount === 'number' ? c.ngnAmount.toLocaleString() : '0')}</span></div>
+  <div><span class="text-gray-600">Card Numbers:</span>
+  <span class="font-medium">
+    ${Array.isArray(c.cardNumbers) && c.cardNumbers.length
+      ? c.cardNumbers.join(', ')
+      : '—'}
+  </span>
+
+</div>
+
+  <div><span class="text-gray-600">Rate:</span> <span class="font-medium">₦${(typeof c.exchangeRate === 'number' ? c.exchangeRate.toLocaleString() : c.exchangeRate ?? '—')}</span></div>
+  <div><span class="text-gray-600">User:</span> <span class="font-medium">${userName}</span></div>
+  <div><span class="text-gray-600">Created:</span> <span class="font-medium">${c.createdAt ?? '—'}</span></div>
+   <div><span class="text-gray-600">Phone Number:</span> <span class="font-medium">${c.phoneNumber || '—'}</span></div>
+ <div><span class="text-gray-600">Payment Method:</span> <span class="font-medium">${c.paymentMethod ?? '—'}</span></div>
+<div><span class="text-gray-600">Crypto Payout:</span> <span class="font-medium">${c.cryptoPayout ?? '—'}</span></div>
+<div><span class="text-gray-600">Wallet Address:</span> <span class="font-medium break-all">${c.walletAddress ?? '—'}</span></div>
+
+</div>
+
+
+            ${bankDetailsHTML}
+${referrerBankDetailsHTML}
+${referrerAmountHTML}
+
+
+            ${c.userDescription ? `
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700">User Desc:</label>
+                <p class="text-sm text-gray-600 bg-gray-50 p-2 rounded">${c.userDescription}</p>
+              </div>
+            ` : ''}
+
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700">Admin Feedback:</label>
+              <textarea
+                id="feedback-${c.id}"
+                class="w-full p-3 border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows="3"
+              >${c.companyFeedback ?? ''}</textarea>
+              <button
+                onclick="updateCompanyFeedback('${c.id}', document.getElementById('feedback-${c.id}').value)"
+                class="mt-2 px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition"
+              >Update Feedback</button>
+            </div>
+
+            <div class="flex space-x-2 mb-4">
+    ${Array.isArray(c.imageUrls) && c.imageUrls.length
+      ? c.imageUrls.map(url => `
+        <div class="relative">
+          <img src="${url}" alt="${c.type} Gift Card" class="w-16 h-16 object-contain rounded border" />
+          <button
+            onclick="copyImageToClipboard('${url}')"
+            class="absolute top-0 right-0 p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+            title="Copy image"
+          >
+            <i data-lucide="copy" class="w-3 h-3"></i>
+          </button>
+        </div>`).join('')
+      : `<span class="text-gray-400">No images</span>`}
+  </div>
+
+
+            <div class="flex justify-between items-center pt-4 border-t">
+              <div class="flex space-x-2">
+                <button
+                  onclick="updateCardStatus('${c.id}', 'successful')"
+                  class="px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition flex items-center"
+                  ${c.status==='successful'?'disabled':''}
+                >
+                  <i data-lucide="check" class="w-4 h-4 mr-1"></i>Success
+                </button>
+                <button
+                  onclick="updateCardStatus('${c.id}', 'failed')"
+                  class="px-4 py-2 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition flex items-center"
+                  ${c.status==='failed'?'disabled':''}
+                >
+                  <i data-lucide="x" class="w-4 h-4 mr-1"></i>Failed
+                </button>
+              </div>
+              <div class="text-xs text-gray-500">
+                ${c.read?`Read ${c.readCount}×`:'Unread'}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  lucide.createIcons();
+}
+
+loadGiftCards();
+
+    const notifications = [
+      { id: 1, type: 'trade', message: 'New gift card submitted: Amazon $100', time: '2 minutes ago', read: false },
+      { id: 2, type: 'user', message: 'New user registered: john_collector', time: '15 minutes ago', read: false },
+      { id: 3, type: 'revenue', message: 'Daily revenue target exceeded!', time: '1 hour ago', read: true },
+      { id: 4, type: 'card', message: 'Gift card processed: iTunes $25', time: '2 hours ago', read: false }
+    ];
+
+    // function updateCardStatus(cardId, newStatus) {
+    //   const card = giftCards.find(c => c.id === cardId);
+    //   if (card) {
+    //     card.status = newStatus;
+    //     card.read = true;
+    //     card.readCount += 1;
+    //     renderCards();
+    //   }
+    // }
+
+    // function updateCompanyFeedback(cardId, feedback) {
+    //   const card = giftCards.find(c => c.id === cardId);
+    //   if (card) {
+    //     card.companyFeedback = feedback;
+    //     card.read = true;
+    //     card.readCount += 1;
+    //     renderCards();
+    //   }
+    // }
+
+  function renderOverview() {
+  const totalUsers = users.length;
+  const totalCards = giftCards.length;
+
+  // Total Amount Traded (sum of all amounts where status = successful)
+  const totalAmountTraded = giftCards
+    .filter(c => c.status?.toLowerCase().trim() === 'successful' && typeof c.amount === 'number')
+    .reduce((sum, c) => sum + c.amount, 0);
+
+  // Revenue = amount * 40
+  const totalRevenue = giftCards
+    .filter(c => c.status?.toLowerCase().trim() === 'successful' && typeof c.amount === 'number')
+    .reduce((sum, c) => sum + (c.amount * 40), 0);
+
+  // Daily Revenue
+  const today = new Date();
+  const dailyRevenue = giftCards
+    .filter(c => c.status?.toLowerCase().trim() === 'successful' && typeof c.amount === 'number' &&
+      new Date(c.createdAt).toDateString() === today.toDateString())
+    .reduce((sum, c) => sum + (c.amount * 40), 0);
+
+  // Weekly Revenue
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - today.getDay()); // start of week (Sunday)
+  const weeklyRevenue = giftCards
+    .filter(c => c.status?.toLowerCase().trim() === 'successful' && typeof c.amount === 'number' &&
+      new Date(c.createdAt) >= weekStart)
+    .reduce((sum, c) => sum + (c.amount * 40), 0);
+
+  // Monthly Revenue
+  const monthlyRevenue = giftCards
+    .filter(c => c.status?.toLowerCase().trim() === 'successful' && typeof c.amount === 'number' &&
+      new Date(c.createdAt).getMonth() === today.getMonth() &&
+      new Date(c.createdAt).getFullYear() === today.getFullYear())
+    .reduce((sum, c) => sum + (c.amount * 40), 0);
+
+  const pendingCards = giftCards.filter(c => c.status?.toLowerCase().trim() === 'pending').length;
+  const latest = giftCards.slice(0, 3);
+
+  tabContent.innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+      ${statCard('users','Total Users', totalUsers,'+12% this month','#3B82F6')}
+      ${statCard('credit-card','Gift Cards', totalCards,'+8% this week','#10B981')}
+      ${statCard('trending-up','Total Traded','$' + (totalAmountTraded ? totalAmountTraded.toLocaleString() : '0'),'All-time','#6366F1')}
+      ${statCard('dollar-sign','Total Revenue','₦' + (totalRevenue ? totalRevenue.toLocaleString() : '0'),'+15% this month','#F59E0B')}
+      ${statCard('clock','Pending Cards', pendingCards,'Awaiting review','#EF4444')}
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      ${statCard('calendar','Daily Revenue','₦' + dailyRevenue.toLocaleString(),'Today','#3B82F6')}
+      ${statCard('calendar','Weekly Revenue','₦' + weeklyRevenue.toLocaleString(),'This week','#10B981')}
+      ${statCard('calendar','Monthly Revenue','₦' + monthlyRevenue.toLocaleString(),'This month','#F59E0B')}
+    </div>
+
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Latest Gift Cards</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        ${latest.map(card => {
+          const userName = card.user || (card.bankDetails?.accountName) || '—';
+          return `
+            <div class="border rounded-lg p-4 hover:shadow-md">
+              <div class="flex justify-between mb-2">
+                <h3 class="font-semibold text-gray-900">${card.type}</h3>
+                <span class="px-2 py-1 text-xs rounded-full ${getStatusColor(card.status)}">${card.status}</span>
+              </div>
+              <p class="text-sm text-gray-600 mb-2">User: ${userName}</p>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-lg font-bold text-green-600">$${card.amount ?? '0'}</span>
+                <span class="text-sm text-gray-500">₦${(typeof card.amount === 'number' ? (card.amount * 40).toLocaleString() : '0')}</span>
+              </div>
+              <p class="text-xs text-gray-500">${card.createdAt}</p>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>`;
+
+  lucide.createIcons();
+}
+
+
+setInterval(() => {
+  loadUsers();
+  loadGiftCards();
+}, 10000);
+
+    // function renderUsers() {
+    //   tabContent.innerHTML = `
+    //     <div class="bg-white rounded-lg shadow-md p-6">
+    //       <h2 class="text-lg font-semibold text-gray-900 mb-4">Users</h2>
+    //       <div class="overflow-x-auto">
+    //         <table class="min-w-full divide-y divide-gray-200">
+    //           <thead class="bg-gray-50">
+    //             <tr>
+    //               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+    //               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+    //               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cards</th>
+    //               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trades</th>
+    //               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
+    //               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+    //             </tr>
+    //           </thead>
+    //           <tbody class="bg-white divide-y divide-gray-200">
+    //             ${users.map(u=>`
+    //               <tr class="hover:bg-gray-50">
+    //                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.name}</td>
+    //                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${u.email}</td>
+    //                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.cardsOwned}</td>
+    //                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${u.totalTrades}</td>
+    //                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$${u.revenue}</td>
+    //                 <td class="px-6 py-4 whitespace-nowrap text-sm">
+    //                   <span class="px-2 py-1 text-xs rounded-full ${u.status==='premium'?'bg-purple-100 text-purple-800':'bg-green-100 text-green-800'}">${u.status}</span>
+    //                 </td>
+    //               </tr>`).join('')}
+    //           </tbody>
+    //         </table>
+    //       </div>
+    //     </div>`;
+    // }
+
+    // function renderCards() {
+    //   tabContent.innerHTML = `
+    //     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    //       ${giftCards.map(c=>`
+    //         <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg border-l-4 ${getStatusBorderColor(c.status)}">
+    //           <div class="flex justify-between mb-4">
+    //             <h3 class="text-lg font-semibold text-gray-900">${c.type} Gift Card</h3>
+    //             <span class="px-3 py-1 text-sm rounded-full ${getStatusColor(c.status)}">${c.status.toUpperCase()}</span>
+    //           </div>
+
+    //           <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
+    //             <div><span class="text-gray-600">Amount:</span> <span class="font-medium text-green-600">$${c.amount} ${c.currency}</span></div>
+    //             <div><span class="text-gray-600">NGN Amount:</span> <span class="font-medium">₦${c.ngnAmount.toLocaleString()}</span></div>
+    //             <div><span class="text-gray-600">Card Number:</span> <span class="font-medium">${c.cardNumber}</span></div>
+    //             <div><span class="text-gray-600">Exchange Rate:</span> <span class="font-medium">₦${c.exchangeRate}</span></div>
+    //             <div><span class="text-gray-600">User:</span> <span class="font-medium">${c.user}</span></div>
+    //             <div><span class="text-gray-600">Created:</span> <span class="font-medium">${c.createdAt}</span></div>
+    //           </div>
+
+    //           ${c.userDescription ? `
+    //             <div class="mb-4">
+    //               <label class="block text-sm font-medium text-gray-700 mb-1">User Description:</label>
+    //               <p class="text-sm text-gray-600 bg-gray-50 p-2 rounded">${c.userDescription}</p>
+    //             </div>
+    //           ` : ''}
+
+    //           <div class="mb-4">
+    //             <label class="block text-sm font-medium text-gray-700 mb-2">Company Feedback:</label>
+    //             <textarea
+    //               id="feedback-${c.id}"
+    //               class="w-full p-3 border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+    //               rows="3"
+    //               placeholder="Enter admin feedback..."
+    //             >${c.companyFeedback}</textarea>
+    //             <button
+    //               onclick="updateCompanyFeedback(${c.id}, document.getElementById('feedback-${c.id}').value)"
+    //               class="mt-2 px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+    //             >
+    //               Update Feedback
+    //             </button>
+    //           </div>
+
+    //           <div class="flex justify-between items-center pt-4 border-t">
+    //             <div class="flex space-x-2">
+    //               <button
+    //                 onclick="updateCardStatus(${c.id}, 'successful')"
+    //                 class="px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors flex items-center"
+    //                 ${c.status === 'successful' ? 'disabled' : ''}
+    //               >
+    //                 <i data-lucide="check" class="w-4 h-4 mr-1"></i>
+    //                 Mark Successful
+    //               </button>
+    //               <button
+    //                 onclick="updateCardStatus(${c.id}, 'failed')"
+    //                 class="px-4 py-2 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors flex items-center"
+    //                 ${c.status === 'failed' ? 'disabled' : ''}
+    //               >
+    //                 <i data-lucide="x" class="w-4 h-4 mr-1"></i>
+    //                 Mark Failed
+    //               </button>
+    //             </div>
+    //             <div class="text-xs text-gray-500">
+    //               ${c.read ? `Read ${c.readCount} time(s)` : 'Unread'}
+    //             </div>
+    //           </div>
+    //         </div>`).join('')}
+    //     </div>`;
+    //   lucide.createIcons();
+    // }
+
+    function renderNotifications() {
+      tabContent.innerHTML = `
+        <div class="space-y-4">
+          ${notifications.map(n=>`
+            <div class="bg-white rounded-lg shadow-md p-4 border-l-4 ${n.read?'border-gray-300':'border-blue-500'} ${!n.read?'bg-blue-50':''}">
+              <div class="flex justify-between">
+                <span class="px-2 py-1 text-xs rounded-full ${n.type==='trade'?'bg-green-100 text-green-800':n.type==='user'?'bg-blue-100 text-blue-800':n.type==='revenue'?'bg-yellow-100 text-yellow-800':'bg-purple-100 text-purple-800'}">${n.type}</span>
+                <span class="text-xs text-gray-500">${n.time}</span>
+              </div>
+              <p class="text-sm text-gray-900 mt-2">${n.message}</p>
+            </div>`).join('')}
+        </div>`;
+    }
+
+    function getStatusColor(status) {
+      switch(status) {
+        case 'pending': return 'bg-yellow-100 text-yellow-800';
+        case 'successful': return 'bg-green-100 text-green-800';
+        case 'failed': return 'bg-red-100 text-red-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
+    }
+
+    function getStatusBorderColor(status) {
+      switch(status) {
+        case 'pending': return 'border-yellow-400';
+        case 'successful': return 'border-green-400';
+        case 'failed': return 'border-red-400';
+        default: return 'border-gray-400';
+      }
+    }
+
+    function statCard(icon,title,val,trend,color){
+      return `<div class="bg-white rounded-lg shadow-md p-6 border-l-4" style="border-left-color:${color}">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="text-sm font-medium text-gray-600">${title}</p>
+            <p class="text-2xl font-bold text-gray-900">${val}</p>
+            <p class="text-sm text-green-600 flex items-center mt-1"><i data-lucide="trending-up" class="w-4 h-4 mr-1"></i>${trend}</p>
+          </div>
+          <i data-lucide="${icon}" class="w-8 h-8" style="color:${color}"></i>
+        </div>
+      </div>`;
+    }
+
+    tabs.forEach(btn=>btn.addEventListener('click',e=>{
+      tabs.forEach(t=>t.classList.remove('active'));
+      e.currentTarget.classList.add('active');
+      const tab=e.currentTarget.dataset.tab;
+      if(tab==='overview') renderOverview();
+      if(tab==='users') renderUsers();
+      if(tab==='cards') renderCards();
+      if(tab==='notifications') renderNotifications();
+      lucide.createIcons();
+    }));
+
+    // Init
+    document.querySelector('[data-tab="overview"]').classList.add('active');
+    document.getElementById('notif-count').innerText = notifications.filter(n=>!n.read).length;
+    document.getElementById('notif-count').classList.remove('hidden');
+    renderOverview();
+  </script>
+
+  <script>
+  document.getElementById('logoutButton').addEventListener('click', () => {
+  // Remove admin token from localStorage
+  localStorage.removeItem('adminToken');
+
+  // Redirect to signin page
+  window.location.href = 'https://cardzip-admin.netlify.app/signin.html';
+});
+</script>
+</body>
+</html>

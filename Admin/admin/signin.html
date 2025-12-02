@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Login - Gift Cards Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .input-focus:focus {
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      border-color: #3B82F6;
+    }
+    .login-animation {
+      animation: slideIn 0.6s ease-out;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .floating-shapes {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      z-index: -1;
+    }
+    .shape {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      animation: float 6s ease-in-out infinite;
+    }
+    .shape:nth-child(1) { width: 80px; height: 80px; left: 10%; top: 20%; animation-delay: 0s; }
+    .shape:nth-child(2) { width: 60px; height: 60px; right: 10%; top: 60%; animation-delay: 2s; }
+    .shape:nth-child(3) { width: 40px; height: 40px; left: 70%; top: 30%; animation-delay: 4s; }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-20px); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 relative">
+  <!-- Floating Background Shapes -->
+  <div class="floating-shapes">
+    <div class="shape"></div>
+    <div class="shape"></div>
+    <div class="shape"></div>
+  </div>
+
+  <!-- Login Container -->
+  <div class="login-animation w-full max-w-md">
+    <!-- Logo/Brand Section -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full shadow-lg mb-4">
+        <i data-lucide="credit-card" class="w-8 h-8 text-indigo-600"></i>
+      </div>
+      <h1 class="text-3xl font-bold text-white mb-2">Admin Portal</h1>
+      <p class="text-indigo-100">Gift Cards Management System</p>
+    </div>
+
+    <!-- Login Form -->
+    <div class="glass-effect rounded-2xl p-8 shadow-2xl">
+      <form id="loginForm" class="space-y-6">
+        <!-- Email Field -->
+        <div>
+          <label for="email" class="block text-sm font-medium text-white mb-2">
+            <i data-lucide="mail" class="w-4 h-4 inline mr-2"></i>
+            Email Address
+          </label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            class="input-focus w-full px-4 py-3 bg-white bg-opacity-20 border border-white border-opacity-30 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+            placeholder="admin@example.com"
+          />
+        </div>
+
+        <!-- Password Field -->
+        <div>
+          <label for="password" class="block text-sm font-medium text-white mb-2">
+            <i data-lucide="lock" class="w-4 h-4 inline mr-2"></i>
+            Password
+          </label>
+          <div class="relative">
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              class="input-focus w-full px-4 py-3 bg-white bg-opacity-20 border border-white border-opacity-30 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 pr-12"
+              placeholder="Enter your password"
+            />
+            <button
+              type="button"
+              id="togglePassword"
+              class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-300 hover:text-white transition-colors"
+            >
+              <i data-lucide="eye" class="w-5 h-5" id="eyeIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Remember Me & Forgot Password -->
+        <div class="flex items-center justify-between">
+          <label class="flex items-center">
+            <input type="checkbox" id="remember" class="w-4 h-4 text-blue-600 bg-white bg-opacity-20 border-white border-opacity-30 rounded focus:ring-blue-500">
+            <span class="ml-2 text-sm text-white">Remember me</span>
+          </label>
+          <a href="#" class="text-sm text-indigo-200 hover:text-white transition-colors">
+            Forgot password?
+          </a>
+        </div>
+
+        <!-- Login Button -->
+        <button
+          type="submit"
+          id="loginButton"
+          class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-transparent transition-all duration-200 transform hover:scale-105"
+        >
+          <span id="loginText">Sign In</span>
+          <i data-lucide="arrow-right" class="w-5 h-5 inline ml-2" id="arrowIcon"></i>
+        </button>
+      </form>
+
+      <!-- Divider -->
+      <div class="my-6 flex items-center">
+        <div class="flex-1 border-t border-white border-opacity-30"></div>
+        <span class="px-4 text-sm text-white">Or continue with</span>
+        <div class="flex-1 border-t border-white border-opacity-30"></div>
+      </div>
+
+      <!-- Social Login Options -->
+      <div class="grid grid-cols-2 gap-4">
+        <button class="flex items-center justify-center px-4 py-2 bg-white bg-opacity-10 hover:bg-opacity-20 rounded-lg text-white transition-all duration-200">
+          <i data-lucide="github" class="w-5 h-5 mr-2"></i>
+          GitHub
+        </button>
+        <button class="flex items-center justify-center px-4 py-2 bg-white bg-opacity-10 hover:bg-opacity-20 rounded-lg text-white transition-all duration-200">
+          <i data-lucide="chrome" class="w-5 h-5 mr-2"></i>
+          Google
+        </button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center mt-8">
+      <p class="text-indigo-100 text-sm">
+        Need help? Contact
+        <a href="mailto:support@giftcards.com" class="text-white hover:underline">support@giftcards.com</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Alert Modal -->
+  <div id="alertModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+      <div class="flex items-center mb-4">
+        <i data-lucide="alert-circle" class="w-6 h-6 text-red-500 mr-3"></i>
+        <h3 class="text-lg font-semibold text-gray-900">Login Failed</h3>
+      </div>
+      <p class="text-gray-600 mb-4" id="alertMessage">Invalid email or password. Please try again.</p>
+      <button
+        onclick="closeAlert()"
+        class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors"
+      >
+        OK
+      </button>
+    </div>
+  </div>
+
+  <script>
+  lucide.createIcons();
+
+  // Toggle password visibility
+  document.getElementById('togglePassword').addEventListener('click', function() {
+    const passwordInput = document.getElementById('password');
+    const eyeIcon = document.getElementById('eyeIcon');
+
+    if (passwordInput.type === 'password') {
+      passwordInput.type = 'text';
+      eyeIcon.setAttribute('data-lucide', 'eye-off');
+    } else {
+      passwordInput.type = 'password';
+      eyeIcon.setAttribute('data-lucide', 'eye');
+    }
+    lucide.createIcons();
+  });
+
+  // Form submission
+  document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const loginButton = document.getElementById('loginButton');
+    const loginText = document.getElementById('loginText');
+    const arrowIcon = document.getElementById('arrowIcon');
+
+    // Show loading state
+    loginButton.disabled = true;
+    loginText.textContent = 'Signing In...';
+    arrowIcon.setAttribute('data-lucide', 'loader-2');
+    arrowIcon.classList.add('animate-spin');
+    lucide.createIcons();
+
+    try {
+      const response = await fetch('https://trader-sr5j-0k7o.onrender.com/api/admin/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Success - redirect to dashboard
+        loginText.textContent = 'Success!';
+        arrowIcon.setAttribute('data-lucide', 'check');
+        arrowIcon.classList.remove('animate-spin');
+        lucide.createIcons();
+
+        // Optional: save token or admin info in localStorage/sessionStorage
+        localStorage.setItem('adminToken', data.token);
+
+        setTimeout(() => {
+          window.location.href = 'https://cardzip-admin.netlify.app/';
+        }, 1000);
+      } else {
+        // Failed login
+        showAlert(data.message || 'Invalid email or password. Please try again.');
+        resetLoginButton();
+      }
+    } catch (error) {
+      showAlert('An error occurred. Please try again later.');
+      resetLoginButton();
+      console.error(error);
+    }
+  });
+
+  function resetLoginButton() {
+    const loginButton = document.getElementById('loginButton');
+    const loginText = document.getElementById('loginText');
+    const arrowIcon = document.getElementById('arrowIcon');
+
+    loginButton.disabled = false;
+    loginText.textContent = 'Sign In';
+    arrowIcon.setAttribute('data-lucide', 'arrow-right');
+    arrowIcon.classList.remove('animate-spin');
+    lucide.createIcons();
+  }
+
+  function showAlert(message) {
+    document.getElementById('alertMessage').textContent = message;
+    document.getElementById('alertModal').classList.remove('hidden');
+  }
+
+  function closeAlert() {
+    document.getElementById('alertModal').classList.add('hidden');
+  }
+
+  // Close modal when clicking outside
+  document.getElementById('alertModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAlert();
+  });
+
+  // Demo credentials helper
+  document.addEventListener('DOMContentLoaded', function() {
+    const demoInfo = document.createElement('div');
+    demoInfo.className = 'mt-4 p-3 bg-white bg-opacity-10 rounded-lg text-center';
+    demoInfo.innerHTML = `
+      <p class="text-sm text-indigo-100 mb-2">Demo Credentials:</p>
+      <p class="text-xs text-white">Email: admin@giftcards.com</p>
+      <p class="text-xs text-white">Password: admin123</p>
+    `;
+    document.querySelector('.glass-effect').appendChild(demoInfo);
+  });
+  </script>
+
+</body>
+</html>

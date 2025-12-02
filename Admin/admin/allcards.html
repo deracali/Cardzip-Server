@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gift Cards Dashboard</title>
+    <script>
+  // Check if adminToken exists
+  const adminToken = localStorage.getItem('adminToken');
+
+  if (!adminToken) {
+    // Redirect to sign-in page if not logged in
+    window.location.href = 'https://cardzip-admin.netlify.app/signin.html';
+  }
+</script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f0f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            background: #000;
+            padding: 30px;
+            text-align: center;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .controls {
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.8);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box, .filter-select {
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .search-box:focus, .filter-select:focus {
+            outline: none;
+            border-color: #000;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .filter-select {
+            min-width: 140px;
+            cursor: pointer;
+        }
+
+        .stats {
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-around;
+            background: rgba(248, 249, 250, 0.8);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 10px;
+        }
+
+        .stat-number {
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .stat-success { color: #28a745; }
+        .stat-failed { color: #dc3545; }
+        .stat-pending { color: #ffc107; }
+        .stat-total { color: #6c757d; }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2rem;
+            color: #666;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #4facfe;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .cards-grid {
+            padding: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .card.successful  {
+            border-color: #28a745;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fff9 100%);
+        }
+
+        .card.failed {
+            border-color: #dc3545;
+            background: linear-gradient(135deg, #ffffff 0%, #fff8f8 100%);
+        }
+
+        .card.pending {
+            border-color: #ffc107;
+            background: linear-gradient(135deg, #ffffff 0%, #fffdf5 100%);
+        }
+
+        .card-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .card-type {
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .card-status {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+
+
+.status-successful {
+            background: #28a745;
+            color: white;
+        }
+
+        .status-failed {
+            background: #dc3545;
+            color: white;
+        }
+
+        .status-pending {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .card-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .info-item {
+            background: rgba(248, 249, 250, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .info-label {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+
+        .info-value {
+            font-weight: bold;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .amount-display {
+            background: #000;
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .primary-amount {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .converted-amount {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .bank-details {
+            background: rgba(52, 58, 64, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .bank-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .bank-info {
+            display: grid;
+            gap: 8px;
+        }
+
+        .bank-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+
+        .bank-label {
+            color: #666;
+        }
+
+        .bank-value {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .card-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-top: 10px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .card-image:hover {
+            transform: scale(1.02);
+        }
+
+        .date-info {
+            font-size: 0.8rem;
+            color: #666;
+            text-align: right;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 8px;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box, .filter-select {
+                min-width: auto;
+            }
+
+            .stats {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+                padding: 15px;
+            }
+
+            .card-info {
+                grid-template-columns: 1fr;
+            }
+        }
+
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎁 Gift Cards Dashboard</h1>
+            <p>Manage and monitor your gift card transactions</p>
+        </div>
+        <button id="logoutButton" class="btn-logout">
+          Logout
+        </button>
+
+        <div class="controls">
+            <input
+                type="text"
+                id="searchInput"
+                class="search-box"
+                placeholder="Search by username, card number, or description..."
+            >
+            <select id="statusFilter" class="filter-select">
+                <option value="all">All Status</option>
+                <option value="successful">Success</option>
+                <option value="failed">Failed</option>
+                <option value="pending">Pending</option>
+            </select>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number stat-total" id="totalCount">0</div>
+                <div class="stat-label">Total Cards</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number stat-success" id="successCount">0</div>
+                <div class="stat-label">Success</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number stat-failed" id="failedCount">0</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number stat-pending" id="pendingCount">0</div>
+                <div class="stat-label">Pending</div>
+            </div>
+        </div>
+
+        <div id="loadingState" class="loading">
+            Loading gift cards...
+        </div>
+
+        <div id="errorState" class="error" style="display: none;">
+            <strong>Error:</strong> <span id="errorMessage"></span>
+        </div>
+
+        <div id="cardsContainer" class="cards-grid" style="display: none;">
+            <!-- Cards will be populated here -->
+        </div>
+
+        <div id="noResults" class="no-results" style="display: none;">
+            <h3>No gift cards found</h3>
+            <p>Try adjusting your search or filter criteria</p>
+        </div>
+    </div>
+
+    <script>
+        let allCards = [];
+        let filteredCards = [];
+
+        // Fetch gift cards from API
+        async function fetchGiftCards() {
+            try {
+                const response = await fetch('https://trader-sr5j-0k7o.onrender.com/api/gift-cards/get', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.data) {
+                    allCards = data.data;
+                    filteredCards = [...allCards];
+                    updateStats();
+                    renderCards();
+                } else {
+                    throw new Error('Invalid response format');
+                }
+
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('cardsContainer').style.display = 'grid';
+
+            } catch (error) {
+                console.error('Error fetching gift cards:', error);
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('errorState').style.display = 'block';
+                document.getElementById('errorMessage').textContent = error.message;
+            }
+        }
+
+        // Update statistics
+        function updateStats() {
+            const total = filteredCards.length;
+            const success = filteredCards.filter(card => card.status === 'successful').length;
+            const failed = filteredCards.filter(card => card.status === 'failed').length;
+            const pending = filteredCards.filter(card => card.status === 'pending').length;
+
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('successCount').textContent = success;
+            document.getElementById('failedCount').textContent = failed;
+            document.getElementById('pendingCount').textContent = pending;
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Map invalid names to valid ISO 4217 currency codes
+function getValidCurrencyCode(currency) {
+    const map = {
+        'Germany': 'EUR',
+        'US Dollar': 'USD',
+        'Nigeria': 'NGN',
+        'GBP': 'GBP'
+        // Add more mappings if needed
+    };
+    return map[currency] || currency || 'USD';
+}
+
+// Format currency safely
+function formatCurrency(amount, currency) {
+    const code = getValidCurrencyCode(currency);
+    try {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: code
+        }).format(amount);
+    } catch (e) {
+        console.warn(`Invalid currency code: ${currency}, defaulting to USD`);
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD'
+        }).format(amount);
+    }
+}
+
+
+        // Render cards
+        function renderCards() {
+            const container = document.getElementById('cardsContainer');
+            const noResults = document.getElementById('noResults');
+
+            if (filteredCards.length === 0) {
+                container.style.display = 'none';
+                noResults.style.display = 'block';
+                return;
+            }
+
+            container.style.display = 'grid';
+            noResults.style.display = 'none';
+
+            container.innerHTML = filteredCards.map(card => {
+                const hasUser = card.user && (card.user.username || card.user.name);
+                const hasBankDetails = card.bankDetails && (card.bankDetails.bankName || card.bankDetails.accountName || card.bankDetails.accountNumber);
+
+                return `
+                    <div class="card ${card.status}">
+                        <div class="card-header">
+                            <div class="card-type">${card.type} Gift Card</div>
+                            <span class="card-status status-${card.status}">${card.status}</span>
+                        </div>
+
+                        <div class="card-body">
+                            <div class="amount-display">
+                                <div class="primary-amount">${formatCurrency(card.amount, card.currency)}</div>
+                               <div class="converted-amount">
+    ≈ ₦${card.ngnAmount ? card.ngnAmount.toLocaleString() : '0'} (Rate: ${card.exchangeRate || 'N/A'})
+</div>
+
+                            </div>
+
+                            <div class="card-info">
+                                <div class="info-item">
+                                    <div class="info-label">Card Number</div>
+                                    <div class="info-value">${card.cardNumber}</div>
+                                </div>
+
+                                ${hasUser ? `
+                                <div class="info-item">
+                                    <div class="info-label">User</div>
+                                    <div class="info-value">${card.user.username || card.user.name || 'N/A'}</div>
+                                </div>
+                                ` : ''}
+
+                                <div class="info-item">
+                                    <div class="info-label">Description</div>
+                                    <div class="info-value">${card.userDescription || 'No description'}</div>
+                                </div>
+
+                                <div class="info-item">
+                                    <div class="info-label">Read Status</div>
+                                    <div class="info-value">${card.read ? 'Read' : 'Unread'} (${card.readCount} times)</div>
+                                </div>
+                            </div>
+
+                            ${hasBankDetails ? `
+                            <div class="bank-details">
+                                <div class="bank-title">🏦 Bank Details</div>
+                                <div class="bank-info">
+                                    ${card.bankDetails.bankName ? `
+                                    <div class="bank-row">
+                                        <span class="bank-label">Bank:</span>
+                                        <span class="bank-value">${card.bankDetails.bankName}</span>
+                                    </div>
+                                    ` : ''}
+                                    ${card.bankDetails.accountName ? `
+                                    <div class="bank-row">
+                                        <span class="bank-label">Account Name:</span>
+                                        <span class="bank-value">${card.bankDetails.accountName}</span>
+                                    </div>
+                                    ` : ''}
+                                    ${card.bankDetails.accountNumber ? `
+                                    <div class="bank-row">
+                                        <span class="bank-label">Account Number:</span>
+                                        <span class="bank-value">${card.bankDetails.accountNumber}</span>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            ${card.imageUrl ? `
+                            <img
+                                src="${card.imageUrl}"
+                                alt="Gift Card Image"
+                                class="card-image"
+                                onclick="window.open('${card.imageUrl}', '_blank')"
+                                onerror="this.style.display='none'"
+                            >
+                            ` : ''}
+
+                            <div class="date-info">
+                                Created: ${formatDate(card.createdAt)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Filter and search functionality
+        function filterCards() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+
+            filteredCards = allCards.filter(card => {
+                // Status filter
+                const statusMatch = statusFilter === 'all' || card.status === statusFilter;
+
+                // Search filter
+                const searchFields = [
+                    card.cardNumber?.toLowerCase() || '',
+                    card.userDescription?.toLowerCase() || '',
+                    card.user?.username?.toLowerCase() || '',
+                    card.user?.name?.toLowerCase() || '',
+                    card.type?.toLowerCase() || '',
+                    card.bankDetails?.accountName?.toLowerCase() || '',
+                    card.bankDetails?.bankName?.toLowerCase() || ''
+                ];
+
+                const searchMatch = searchTerm === '' || searchFields.some(field =>
+                    field.includes(searchTerm)
+                );
+
+                return statusMatch && searchMatch;
+            });
+
+            updateStats();
+            renderCards();
+        }
+
+        // Event listeners
+        document.getElementById('searchInput').addEventListener('input', filterCards);
+        document.getElementById('statusFilter').addEventListener('change', filterCards);
+
+        // Initialize
+        fetchGiftCards();
+    </script>
+
+
+    <script>
+    document.getElementById('logoutButton').addEventListener('click', () => {
+    // Remove admin token from localStorage
+    localStorage.removeItem('adminToken');
+
+    // Redirect to signin page
+    window.location.href = 'https://cardzip-admin.netlify.app/signin.html';
+  });
+  </script>
+
+
+</body>
+</html>

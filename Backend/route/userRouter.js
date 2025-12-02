@@ -7,7 +7,8 @@ import {
     loginUser,
     updateUser,
     sendResetCode,
-    resetPasswordWithCode
+    resetPasswordWithCode,
+    deleteUserByEmail 
 } from '../controller/userController.js';
 
 const userRouter = express.Router();

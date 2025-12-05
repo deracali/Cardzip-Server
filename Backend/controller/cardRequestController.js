@@ -54,13 +54,13 @@ export const createGiftCard = async (req, res) => {
       cryptoPayout,
       walletAddress,
       phoneNumber,
+      tradeSpeed, // <-- NEW
     } = req.body;
 
-    // ----- TEMP DEBUGGING (remove when finished) -----
+    // ----- TEMP DEBUGGING -----
     console.log("🔎 Incoming Content-Type header:", req.headers?.["content-type"] || req.headers);
     console.log("🔎 Incoming req.body keys:", Object.keys(req.body || {}));
     try {
-      // show first ~20 entries of body for safety
       const previewObj = Object.fromEntries(Object.entries(req.body || {}).slice(0, 20));
       console.log("🔎 req.body preview:", JSON.stringify(previewObj, null, 2));
     } catch (dbgErr) {
@@ -85,12 +85,10 @@ export const createGiftCard = async (req, res) => {
         : [req.body.cardNumbers];
       cardNumbers = cardNumbers.map((c) => c.trim()).filter(Boolean);
     }
-
-    // (optional) log normalized cardNumbers for debugging
     console.log("🔎 normalized cardNumbers:", cardNumbers);
 
     // ✅ Validate required fields
-    if (!type || !amount || !currency || cardNumbers.length === 0) {
+    if (!type || !amount) {
       return res
         .status(400)
         .json({ message: "Please provide all required fields (including card numbers)." });
@@ -109,31 +107,25 @@ export const createGiftCard = async (req, res) => {
     // ✅ Handle multiple images
     let finalImageUrls = [];
 
-    // From form-data
-    if (req.files?.images) {
-      const images = Array.isArray(req.files.images)
-        ? req.files.images
-        : [req.files.images];
-
-      for (const img of images) {
-        if (!img.mimetype.startsWith("image/")) {
-          return res.status(400).json({ message: "Invalid file type. Please upload only images." });
-        }
+  // Handle uploaded images
+  if (req.files?.images) {
+    const images = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
+    for (const img of images) {
+      // Only process valid image files
+      if (img.mimetype.startsWith("image/")) {
         const uploadedUrl = await uploadImage(img.tempFilePath);
         finalImageUrls.push(uploadedUrl);
       }
+      // Ignore invalid files silently instead of throwing an error
     }
+  }
 
-    // From body URLs
-    if (imagesFromBody && Array.isArray(imagesFromBody)) {
-      finalImageUrls.push(...imagesFromBody.filter((url) => url.startsWith("http")));
-    }
+  // Add image URLs from request body if provided
+  if (imagesFromBody && Array.isArray(imagesFromBody)) {
+    finalImageUrls.push(...imagesFromBody.filter((url) => url.startsWith("http")));
+  }
 
-    if (finalImageUrls.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Please upload at least one image or provide valid image URLs." });
-    }
+  // ✅ No error if finalImageUrls is empty
 
     // 👉 Check for referrer
     let referrerBankDetails = null;
@@ -172,6 +164,7 @@ export const createGiftCard = async (req, res) => {
       paymentMethod: paymentMethod || null,
       cryptoPayout: isNaN(parsedCryptoPayout) ? null : parsedCryptoPayout,
       walletAddress: walletAddress || null,
+      tradeSpeed: tradeSpeed === "slow" ? "slow" : "fast", // default to 'fast'
     });
 
     return res.status(201).json({
@@ -209,6 +202,12 @@ export const updateGiftCard = async (req, res) => {
       }
     });
 
+    // If status is being updated, also update statusUpdatedAt
+    if (updates.status) {
+      updates.statusUpdatedAt = new Date();
+      console.log("🕒 Status updated, new timestamp:", updates.statusUpdatedAt);
+    }
+
     // Check if there’s anything to update
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No valid fields provided for update' });
@@ -217,7 +216,7 @@ export const updateGiftCard = async (req, res) => {
     const updatedGiftCard = await GiftCard.findByIdAndUpdate(
       id,
       { $set: updates },
-      { new: true }
+      { new: true } // return the updated document
     );
 
     if (!updatedGiftCard) {
@@ -240,9 +239,9 @@ export const getAllGiftCards = async (req, res) => {
   try {
     const giftCards = await GiftCard
       .find()
-      .limit(30)                // get all cards
-      .sort({ createdAt: -1 })     // newest first
-      .populate('user', 'name email'); // join user info
+      .limit(30)
+      .sort({ statusUpdatedAt: -1 })  // sort by latest status change
+      .populate('user', 'name email');
 
     res.json({ success: true, data: giftCards });
   } catch (err) {

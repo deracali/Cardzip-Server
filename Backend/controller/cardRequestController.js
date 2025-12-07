@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import GiftCard from "../model/cardRequestModel.js";
 import User from '../model/userModel.js';
 import redisClient from '../controller/redisClient.js';
-
+import streamifier from 'streamifier';
 
 
 // Cloudinary Configuration
@@ -16,24 +16,20 @@ cloudinary.config({
 });
 
 // Helper to upload image
-const uploadImage = async (filePath) => {
-  try {
-    console.log("📤 Uploading image to Cloudinary...");
-    console.log("📝 File path:", filePath);
+// This function uploads an image buffer (not file path) to Cloudinary using a stream
+const uploadImage = async (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder: "teacher_profiles" },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
 
-    const result = await cloudinary.uploader.upload(filePath, {
-      folder: "teacher_profiles",
-    });
-
-    console.log("✅ Image uploaded successfully. URL:", result.secure_url);
-    return result.secure_url;
-  } catch (uploadErr) {
-    console.error("❌ Cloudinary upload error:", uploadErr.message);
-    if (uploadErr.response?.body) {
-      console.error("Cloudinary response body:", uploadErr.response.body);
-    }
-    throw uploadErr;
-  }
+    // Convert the buffer into a stream and pipe it into Cloudinary
+    streamifier.createReadStream(fileBuffer).pipe(uploadStream);
+  });
 };
 
 export const createGiftCard = async (req, res) => {
@@ -79,13 +75,25 @@ export const createGiftCard = async (req, res) => {
 
     // ✅ Normalize cardNumbers
     let cardNumbers = [];
-    if (req.body.cardNumbers) {
-      cardNumbers = Array.isArray(req.body.cardNumbers)
-        ? req.body.cardNumbers
-        : [req.body.cardNumbers];
-      cardNumbers = cardNumbers.map((c) => c.trim()).filter(Boolean);
+
+  if (req.body.cardNumbers) {
+    if (typeof req.body.cardNumbers === "string") {
+      try {
+        // Try to parse JSON string
+        cardNumbers = JSON.parse(req.body.cardNumbers);
+      } catch {
+        // If parsing fails, fallback to treating it as a single string
+        cardNumbers = [req.body.cardNumbers];
+      }
+    } else if (Array.isArray(req.body.cardNumbers)) {
+      cardNumbers = req.body.cardNumbers;
     }
-    console.log("🔎 normalized cardNumbers:", cardNumbers);
+
+    // Trim and remove empty values
+    cardNumbers = cardNumbers.map(c => c.trim()).filter(Boolean);
+  }
+
+  console.log("🔎 normalized cardNumbers:", cardNumbers);
 
     // ✅ Validate required fields
     if (!type || !amount) {
@@ -110,15 +118,19 @@ export const createGiftCard = async (req, res) => {
   // Handle uploaded images
   if (req.files?.images) {
     const images = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
-    for (const img of images) {
-      // Only process valid image files
-      if (img.mimetype.startsWith("image/")) {
-        const uploadedUrl = await uploadImage(img.tempFilePath);
-        finalImageUrls.push(uploadedUrl);
-      }
-      // Ignore invalid files silently instead of throwing an error
-    }
+
+    // Filter valid images and start all uploads at once
+    const uploadPromises = images
+      .filter((img) => img.mimetype.startsWith("image/"))
+      .map((img) => uploadImage(img.tempFilePath));
+
+    // Wait for all uploads to finish
+    const uploadedUrls = await Promise.all(uploadPromises);
+
+    // Add all URLs to final array
+    finalImageUrls.push(...uploadedUrls);
   }
+
 
   // Add image URLs from request body if provided
   if (imagesFromBody && Array.isArray(imagesFromBody)) {

@@ -265,7 +265,7 @@ export const sendResetCode = async (req, res) => {
 
     // Send email via Resend
     await resend.emails.send({
-      from: 'Cardzip <onboarding@resend.dev>',
+      from: 'CardZip Notifications <noreply@cardzip.com.ng>',
       to: user.email,
       subject: 'Your Password Reset Code',
       html: `

@@ -5,7 +5,6 @@ const giftCardSchema = new mongoose.Schema({
   amount: { type: Number, required: true, min: 1 },
   currency: { type: String, required: true, default: 'USD' },
 
-  cardNumbers: [{ type: String, trim: true }],
   imageUrls: [{ type: String }],
 
   ngnAmount: Number,
@@ -30,7 +29,6 @@ const giftCardSchema = new mongoose.Schema({
      default: 'fast', // you can choose the default
    },
 
-  userDescription: { type: String, trim: true },
   companyFeedback: { type: String, trim: true },
 
   read: { type: Boolean, default: false },

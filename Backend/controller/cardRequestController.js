@@ -38,7 +38,6 @@ export const createGiftCard = async (req, res) => {
       type,
       amount,
       currency,
-      userDescription,
       user, // userId
       bankName,
       accountName,
@@ -50,63 +49,58 @@ export const createGiftCard = async (req, res) => {
       cryptoPayout,
       walletAddress,
       phoneNumber,
-      tradeSpeed, // <-- NEW
+      tradeSpeed,
     } = req.body;
 
     // ----- TEMP DEBUGGING -----
-    console.log("🔎 Incoming Content-Type header:", req.headers?.["content-type"] || req.headers);
+    console.log(
+      "🔎 Incoming Content-Type header:",
+      req.headers?.["content-type"] || req.headers
+    );
     console.log("🔎 Incoming req.body keys:", Object.keys(req.body || {}));
     try {
-      const previewObj = Object.fromEntries(Object.entries(req.body || {}).slice(0, 20));
+      const previewObj = Object.fromEntries(
+        Object.entries(req.body || {}).slice(0, 20)
+      );
       console.log("🔎 req.body preview:", JSON.stringify(previewObj, null, 2));
     } catch (dbgErr) {
       console.log("🔎 req.body preview error:", dbgErr);
     }
     console.log("🔎 req.files keys:", Object.keys(req.files || {}));
     if (req.files?.images) {
-      const ims = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
+      const ims = Array.isArray(req.files.images)
+        ? req.files.images
+        : [req.files.images];
       console.log(
         "🔎 received images count:",
         ims.length,
-        ims.map((f) => ({ originalname: f.originalname, mimetype: f.mimetype, size: f.size }))
+        ims.map((f) => ({
+          originalname: f.originalname,
+          mimetype: f.mimetype,
+          size: f.size,
+        }))
       );
     }
     // ----- END DEBUGGING -----
-
-    // ✅ Normalize cardNumbers
-    let cardNumbers = [];
-
-  if (req.body.cardNumbers) {
-    if (typeof req.body.cardNumbers === "string") {
-      try {
-        // Try to parse JSON string
-        cardNumbers = JSON.parse(req.body.cardNumbers);
-      } catch {
-        // If parsing fails, fallback to treating it as a single string
-        cardNumbers = [req.body.cardNumbers];
-      }
-    } else if (Array.isArray(req.body.cardNumbers)) {
-      cardNumbers = req.body.cardNumbers;
-    }
-
-    // Trim and remove empty values
-    cardNumbers = cardNumbers.map(c => c.trim()).filter(Boolean);
-  }
-
-  console.log("🔎 normalized cardNumbers:", cardNumbers);
 
     // ✅ Validate required fields
     if (!type || !amount) {
       return res
         .status(400)
-        .json({ message: "Please provide all required fields (including card numbers)." });
+        .json({ message: "Please provide all required fields." });
     }
 
     // ✅ Parse numbers
     const parsedAmount = Number(amount.toString().replace(/,/g, ""));
-    const parsedNgnAmount = ngnAmount ? Number(ngnAmount.toString().replace(/,/g, "")) : null;
-    const parsedExchangeRate = exchangeRate ? Number(exchangeRate.toString().replace(/,/g, "")) : null;
-    const parsedCryptoPayout = cryptoPayout ? Number(cryptoPayout.toString().replace(/,/g, "")) : null;
+    const parsedNgnAmount = ngnAmount
+      ? Number(ngnAmount.toString().replace(/,/g, ""))
+      : null;
+    const parsedExchangeRate = exchangeRate
+      ? Number(exchangeRate.toString().replace(/,/g, ""))
+      : null;
+    const parsedCryptoPayout = cryptoPayout
+      ? Number(cryptoPayout.toString().replace(/,/g, ""))
+      : null;
 
     if (isNaN(parsedAmount)) {
       return res.status(400).json({ message: "Invalid card amount." });
@@ -115,29 +109,26 @@ export const createGiftCard = async (req, res) => {
     // ✅ Handle multiple images
     let finalImageUrls = [];
 
-  // Handle uploaded images
-  if (req.files?.images) {
-    const images = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
+    // Handle uploaded images
+    if (req.files?.images) {
+      const images = Array.isArray(req.files.images)
+        ? req.files.images
+        : [req.files.images];
 
-    // Filter valid images and start all uploads at once
-    const uploadPromises = images
-      .filter((img) => img.mimetype.startsWith("image/"))
-      .map((img) => uploadImage(img.tempFilePath));
+      const uploadPromises = images
+        .filter((img) => img.mimetype.startsWith("image/"))
+        .map((img) => uploadImage(img.tempFilePath));
 
-    // Wait for all uploads to finish
-    const uploadedUrls = await Promise.all(uploadPromises);
+      const uploadedUrls = await Promise.all(uploadPromises);
+      finalImageUrls.push(...uploadedUrls);
+    }
 
-    // Add all URLs to final array
-    finalImageUrls.push(...uploadedUrls);
-  }
-
-
-  // Add image URLs from request body if provided
-  if (imagesFromBody && Array.isArray(imagesFromBody)) {
-    finalImageUrls.push(...imagesFromBody.filter((url) => url.startsWith("http")));
-  }
-
-  // ✅ No error if finalImageUrls is empty
+    // Add image URLs from request body if provided
+    if (imagesFromBody && Array.isArray(imagesFromBody)) {
+      finalImageUrls.push(
+        ...imagesFromBody.filter((url) => url.startsWith("http"))
+      );
+    }
 
     // 👉 Check for referrer
     let referrerBankDetails = null;
@@ -157,12 +148,10 @@ export const createGiftCard = async (req, res) => {
       type,
       amount: parsedAmount,
       currency,
-      cardNumbers,
       imageUrls: finalImageUrls,
       ngnAmount: isNaN(parsedNgnAmount) ? null : parsedNgnAmount,
       exchangeRate: isNaN(parsedExchangeRate) ? null : parsedExchangeRate,
       user: user || null,
-      userDescription: userDescription || null,
       status: "pending",
       read: false,
       readCount: 0,
@@ -176,7 +165,7 @@ export const createGiftCard = async (req, res) => {
       paymentMethod: paymentMethod || null,
       cryptoPayout: isNaN(parsedCryptoPayout) ? null : parsedCryptoPayout,
       walletAddress: walletAddress || null,
-      tradeSpeed: tradeSpeed === "slow" ? "slow" : "fast", // default to 'fast'
+      tradeSpeed: tradeSpeed === "slow" ? "slow" : "fast",
     });
 
     return res.status(201).json({
@@ -185,7 +174,11 @@ export const createGiftCard = async (req, res) => {
     });
   } catch (error) {
     console.error("❗ Error in createGiftCard:", error.message);
-    return res.status(500).json({ message: "Server error." });
+    return res.status(500).json({
+       message: "Server error.",
+       error: error.message,
+       stack: error.stack,
+     });
   }
 };
 

@@ -17,19 +17,18 @@ cloudinary.config({
 
 // Helper to upload image
 // This function uploads an image buffer (not file path) to Cloudinary using a stream
-const uploadImage = async (fileBuffer) => {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      { folder: "teacher_profiles" },
-      (error, result) => {
-        if (error) return reject(error);
-        resolve(result.secure_url);
-      }
-    );
-
-    // Convert the buffer into a stream and pipe it into Cloudinary
-    streamifier.createReadStream(fileBuffer).pipe(uploadStream);
-  });
+// file = req.files.images[i]
+// Upload image to Cloudinary
+const uploadImage = async (filePath) => {
+  try {
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: "teacher_profiles", // change folder as needed
+    });
+    return result.secure_url;
+  } catch (error) {
+    console.error("❌ Cloudinary upload failed:", error);
+    throw error; // propagate error so backend can catch it
+  }
 };
 
 export const createGiftCard = async (req, res) => {
@@ -53,54 +52,35 @@ export const createGiftCard = async (req, res) => {
     } = req.body;
 
     // ----- TEMP DEBUGGING -----
-    console.log(
-      "🔎 Incoming Content-Type header:",
-      req.headers?.["content-type"] || req.headers
-    );
+    console.log("🔎 Incoming Content-Type header:", req.headers?.["content-type"] || req.headers);
     console.log("🔎 Incoming req.body keys:", Object.keys(req.body || {}));
     try {
-      const previewObj = Object.fromEntries(
-        Object.entries(req.body || {}).slice(0, 20)
-      );
+      const previewObj = Object.fromEntries(Object.entries(req.body || {}).slice(0, 20));
       console.log("🔎 req.body preview:", JSON.stringify(previewObj, null, 2));
     } catch (dbgErr) {
       console.log("🔎 req.body preview error:", dbgErr);
     }
     console.log("🔎 req.files keys:", Object.keys(req.files || {}));
     if (req.files?.images) {
-      const ims = Array.isArray(req.files.images)
-        ? req.files.images
-        : [req.files.images];
+      const ims = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
       console.log(
         "🔎 received images count:",
         ims.length,
-        ims.map((f) => ({
-          originalname: f.originalname,
-          mimetype: f.mimetype,
-          size: f.size,
-        }))
+        ims.map((f) => ({ originalname: f.originalname, mimetype: f.mimetype, size: f.size }))
       );
     }
     // ----- END DEBUGGING -----
 
     // ✅ Validate required fields
     if (!type || !amount) {
-      return res
-        .status(400)
-        .json({ message: "Please provide all required fields." });
+      return res.status(400).json({ message: "Please provide all required fields." });
     }
 
     // ✅ Parse numbers
     const parsedAmount = Number(amount.toString().replace(/,/g, ""));
-    const parsedNgnAmount = ngnAmount
-      ? Number(ngnAmount.toString().replace(/,/g, ""))
-      : null;
-    const parsedExchangeRate = exchangeRate
-      ? Number(exchangeRate.toString().replace(/,/g, ""))
-      : null;
-    const parsedCryptoPayout = cryptoPayout
-      ? Number(cryptoPayout.toString().replace(/,/g, ""))
-      : null;
+    const parsedNgnAmount = ngnAmount ? Number(ngnAmount.toString().replace(/,/g, "")) : null;
+    const parsedExchangeRate = exchangeRate ? Number(exchangeRate.toString().replace(/,/g, "")) : null;
+    const parsedCryptoPayout = cryptoPayout ? Number(cryptoPayout.toString().replace(/,/g, "")) : null;
 
     if (isNaN(parsedAmount)) {
       return res.status(400).json({ message: "Invalid card amount." });
@@ -111,13 +91,11 @@ export const createGiftCard = async (req, res) => {
 
     // Handle uploaded images
     if (req.files?.images) {
-      const images = Array.isArray(req.files.images)
-        ? req.files.images
-        : [req.files.images];
+      const images = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
 
       const uploadPromises = images
         .filter((img) => img.mimetype.startsWith("image/"))
-        .map((img) => uploadImage(img.tempFilePath));
+        .map((img) => uploadImage(img.tempFilePath)); // <-- pass filePath directly
 
       const uploadedUrls = await Promise.all(uploadPromises);
       finalImageUrls.push(...uploadedUrls);
@@ -125,9 +103,7 @@ export const createGiftCard = async (req, res) => {
 
     // Add image URLs from request body if provided
     if (imagesFromBody && Array.isArray(imagesFromBody)) {
-      finalImageUrls.push(
-        ...imagesFromBody.filter((url) => url.startsWith("http"))
-      );
+      finalImageUrls.push(...imagesFromBody.filter((url) => url.startsWith("http")));
     }
 
     // 👉 Check for referrer
@@ -173,12 +149,12 @@ export const createGiftCard = async (req, res) => {
       giftCard: newGiftCard,
     });
   } catch (error) {
-    console.error("❗ Error in createGiftCard:", error.message);
+    console.error("❗ Error in createGiftCard:", error); // log full error
     return res.status(500).json({
-       message: "Server error.",
-       error: error.message,
-       stack: error.stack,
-     });
+      message: "Server error.",
+      error: error.message,
+      stack: error.stack,
+    });
   }
 };
 

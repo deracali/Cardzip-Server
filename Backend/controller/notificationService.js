@@ -9,8 +9,7 @@ export const sendAdminNotification = async (title, body) => {
     // 🔹 Hardcoded admin user IDs
     const userIds = [
       '6921cac16812ca69503f8528',
-      '694e7a696d94aa677ce9b7a3',
-      '694d46486d94aa677ce9aa57'
+      '694e7a696d94aa677ce9b7a3'
     ];
 
     // 🔹 Fetch all users

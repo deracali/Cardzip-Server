@@ -4,6 +4,7 @@ import GiftCard from "../model/cardRequestModel.js";
 import User from '../model/userModel.js';
 import redisClient from '../controller/redisClient.js';
 import streamifier from 'streamifier';
+import { sendAdminNotification } from './notificationService.js';
 
 
 // Cloudinary Configuration
@@ -143,6 +144,14 @@ export const createGiftCard = async (req, res) => {
       walletAddress: walletAddress || null,
       tradeSpeed: tradeSpeed === "slow" ? "slow" : "fast",
     });
+
+
+    // ✅ Send admin notification automatically
+  sendAdminNotification(
+    '🎉 New Gift Card Created!',
+    `A new ${newGiftCard.type} gift card of ${newGiftCard.amount} ${newGiftCard.currency} has been created.`
+  );
+
 
     return res.status(201).json({
       message: "Gift card sale created successfully.",

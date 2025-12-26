@@ -185,6 +185,90 @@ app.post('/send-notification', async (req, res) => {
 
 
 
+
+app.post('/send-notification-admin', async (req, res) => {
+  const { title, body } = req.body;
+
+  if (!title || !body) {
+    return res.status(400).json({ error: 'title and body are required' });
+  }
+
+  try {
+    // 🔹 Hardcoded user ID
+    const userId = '6921cac16812ca69503f8528';
+
+    const user = await User.findById(userId);
+    if (!user || !user.pushTokens?.length) {
+      return res.status(404).json({ error: 'No tokens for this user' });
+    }
+
+    console.log('📱 Sending to user:', {
+      id: user._id,
+      tokens: user.pushTokens,
+    });
+
+    // ✅ Collect all unique valid tokens
+    const uniqueTokens = new Set();
+    for (const token of user.pushTokens) {
+      if (Expo.isExpoPushToken(token)) {
+        uniqueTokens.add(token);
+      }
+    }
+
+    if (!uniqueTokens.size) {
+      return res.status(404).json({ error: 'No valid Expo tokens to send to' });
+    }
+
+    const projectGroups = {};
+    for (const token of uniqueTokens) {
+      const projectMatch = token.match(/\[(.*?)\]/);
+      const projectId = projectMatch ? projectMatch[1].split(':')[0] : 'unknown';
+      if (!projectGroups[projectId]) projectGroups[projectId] = [];
+      projectGroups[projectId].push(token);
+    }
+
+    const tickets = [];
+    let sentCount = 0;
+
+    // ✅ Send notifications per project group
+    for (const [projectId, tokens] of Object.entries(projectGroups)) {
+      console.log(`🚀 Sending ${tokens.length} notifications for project: ${projectId}`);
+
+      const messages = tokens.map((token) => ({
+        to: token,
+        sound: 'default',
+        title,
+        body,
+        priority: 'high',
+        channelId: 'default',
+        android: {
+          channelId: 'default',
+          priority: 'max',
+        },
+      }));
+
+      const chunks = expo.chunkPushNotifications(messages);
+      for (const chunk of chunks) {
+        try {
+          const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+          console.log('📨 Ticket chunk:', ticketChunk);
+          tickets.push(...ticketChunk);
+          sentCount += messages.length;
+        } catch (error) {
+          console.error(`❌ Error sending chunk for project ${projectId}:`, error);
+        }
+      }
+    }
+
+    res.json({ success: true, count: sentCount, tickets });
+  } catch (err) {
+    console.error('Send notification error:', err);
+    res.status(500).json({ error: 'Failed to send notification' });
+  }
+});
+
+
+
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

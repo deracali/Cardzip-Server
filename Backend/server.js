@@ -68,13 +68,6 @@ app.use(express.json({
 }));
 app.use(cors());
 const expo = new Expo();
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(async () => {
-    await removeLegacyUniqueOwnerIndex();
-    console.log('Connected to MongoDB Atlas');
-  })
-  .catch((err) => console.error('MongoDB initialization error:', err));
 
 // Routes
 app.use('/api/users', userRouter);
@@ -1090,12 +1083,41 @@ app.post('/api/education/pay-jamb', async (req, res) => {
 // Start server
 const PORT = process.env.PORT || 5000;
 const httpServer = createServer(app);
-initializeGiftCardRealtime(httpServer);
-httpServer.listen(PORT, () => {
+
+const startServer = async () => {
+  const mongoUri = process.env.MONGO_URI?.trim();
+  if (!mongoUri) {
+    throw new Error('MONGO_URI is required to start the API server.');
+  }
+
+  await mongoose.connect(mongoUri);
+  await removeLegacyUniqueOwnerIndex();
+  console.log('Connected to MongoDB Atlas');
+
+  initializeGiftCardRealtime(httpServer);
+  await new Promise((resolve, reject) => {
+    const handleError = (error) => {
+      httpServer.off('listening', handleListening);
+      reject(error);
+    };
+    const handleListening = () => {
+      httpServer.off('error', handleError);
+      resolve();
+    };
+    httpServer.once('error', handleError);
+    httpServer.once('listening', handleListening);
+    httpServer.listen(PORT);
+  });
+
   console.log(`Server running on port ${PORT}`);
   void connectRedis()
     .then(() => startTelegramBot())
     .catch((error) => {
       console.error('Telegram startup failed; the API server will continue running:', error.message);
     });
+};
+
+startServer().catch((error) => {
+  console.error('API server startup failed:', error);
+  process.exit(1);
 });

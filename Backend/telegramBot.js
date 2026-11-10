@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import redisClient, { isRedisConfigured, isRedisReady } from './controller/redisClient.js';
 import { getTelegramServiceCredential } from './utils/telegramServiceAuth.js';
 
-const apiBaseUrl = (process.env.CARDZIP_API_BASE_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
+const apiBaseUrl = (process.env.CARDZIP_API_BASE_URL || 'https://cardzip-server-hvg6.onrender.com/api').replace(/\/+$/, '');
 const serviceCredential = getTelegramServiceCredential();
 const instanceId = randomUUID();
 const sessionKey = (chatId) => `cardzip:telegram:session:${chatId}`;

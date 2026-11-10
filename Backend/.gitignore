@@ -6,7 +6,19 @@ logs/
 *.log
 
 # Environment variables
-.env
+.env*
+*.env
+*.env.*
+
+# Secret and credential files
+*secret*
+*credential*
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
 
 # Build outputs
 dist/

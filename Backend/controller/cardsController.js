@@ -1,4 +1,5 @@
 import GiftCard from '../model/giftcardModel.js'; // adjust path as needed
+import { createPaginationMetadata, parsePagination } from '../utils/pagination.js';
 
 // Create a new gift card
 export const createGiftCard = async (req, res) => {
@@ -7,6 +8,7 @@ export const createGiftCard = async (req, res) => {
       name,
       category,
       discount,
+      logo,
       color,
       popular,
       cardLimit,
@@ -17,6 +19,7 @@ export const createGiftCard = async (req, res) => {
       name,
       category,
       discount,
+      logo,
       color,
       popular,
       cardLimit,
@@ -33,8 +36,12 @@ export const createGiftCard = async (req, res) => {
 // Get all gift cards
 export const getGiftCards = async (req, res) => {
   try {
-    const cards = await GiftCard.find();
-    res.json({ success: true, data: cards });
+    const { page, limit, skip } = parsePagination(req.query, 15, 50);
+    const [cards, totalItems] = await Promise.all([
+      GiftCard.find().sort({ popular: -1, name: 1 }).skip(skip).limit(limit),
+      GiftCard.countDocuments(),
+    ]);
+    res.json({ success: true, data: cards, pagination: createPaginationMetadata(totalItems, page, limit) });
   } catch (err) {
     console.error('Get GiftCards Error:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -66,6 +73,7 @@ export const updateGiftCard = async (req, res) => {
       'name',
       'category',
       'discount',
+      'logo',
       // 'image',    <-- removed
       'color',
       'popular',

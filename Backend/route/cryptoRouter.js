@@ -7,8 +7,10 @@ import {
     getTransactionById,
     updateTransaction,
 } from '../controller/cryptoController.js';
+import { authenticateAdmin, requireAdminPermission } from '../middleware/authenticateAdmin.js';
 
 const CryptoRouter = express.Router();
+CryptoRouter.use(authenticateAdmin, requireAdminPermission('Trade History'));
 
 // Middleware for file uploads (enables req.files and uses temp files)
 CryptoRouter.use(fileUpload({ useTempFiles: true }));

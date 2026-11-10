@@ -1,10 +1,15 @@
 import CryptoRate from '../model/cryptoRateModel.js'; // adjust path as needed
+import { createPaginationMetadata, parsePagination } from '../utils/pagination.js';
 
 // Get all crypto rates
 export const getAllRates = async (req, res) => {
   try {
-    const rates = await CryptoRate.find().sort({ symbol: 1 });
-    res.json(rates);
+    const { page, limit, skip } = parsePagination(req.query, 20, 50);
+    const [rates, totalItems] = await Promise.all([
+      CryptoRate.find().sort({ symbol: 1 }).skip(skip).limit(limit),
+      CryptoRate.countDocuments(),
+    ]);
+    res.json({ success: true, data: rates, pagination: createPaginationMetadata(totalItems, page, limit) });
   } catch (error) {
     res.status(500).json({ message: 'Failed to get crypto rates', error: error.message });
   }

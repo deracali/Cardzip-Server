@@ -4,7 +4,28 @@ import User from '../model/userModel.js';
 
 const expo = new Expo();
 
-export const sendAdminNotification = async (title, body) => {
+export const sendUserPushNotification = async (user, { title, body, data = {} }) => {
+  const tokens = [...new Set((user?.pushTokens || []).filter((token) => Expo.isExpoPushToken(token)))];
+  if (!tokens.length) return;
+  const messages = tokens.map((to) => ({
+    to,
+    sound: 'default',
+    title,
+    body,
+    data,
+    priority: 'high',
+    channelId: 'default',
+  }));
+  for (const chunk of expo.chunkPushNotifications(messages)) {
+    try {
+      await expo.sendPushNotificationsAsync(chunk);
+    } catch (error) {
+      console.error('User push notification failed:', error);
+    }
+  }
+};
+
+export const sendAdminNotification = async (title, body, data = {}) => {
   try {
     // 🔹 Hardcoded admin user IDs
     const userIds = [
@@ -39,6 +60,7 @@ export const sendAdminNotification = async (title, body) => {
       sound: 'default',
       title,
       body,
+      data,
       priority: 'high',
       channelId: 'default',
       android: {

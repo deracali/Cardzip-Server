@@ -1,4 +1,5 @@
 import express from 'express';
+import { authenticateAdmin, requireAdminPermission } from '../middleware/authenticateAdmin.js';
 import {
     bulkUpdateRates,
     createRate,
@@ -12,6 +13,7 @@ const CryptoRateRouter = express.Router();
 
 CryptoRateRouter.get('/get', getAllRates);  // get in di
 CryptoRateRouter.get('/get/:symbol', getRateBySymbol);
+CryptoRateRouter.use(authenticateAdmin, requireAdminPermission('Trade History'));
  CryptoRateRouter.post('/create', createRate);   // only form 
 CryptoRateRouter.put('/update/:symbol', updateRate);  /// e.g., /update/BTC
 CryptoRateRouter.delete('/delete/:symbol', deleteRate); // e.g., /delete/BTC

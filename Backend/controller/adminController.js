@@ -1,79 +1,132 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import nodemailer from 'nodemailer';
-import sgMail from "@sendgrid/mail";
+import { timingSafeEqual } from 'node:crypto';
+import { Resend } from 'resend';
 import Admin from '../model/adminModel.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
+const getJwtSecret = () => process.env.JWT_SECRET;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Admin Signup
+const safeAdmin = (admin) => ({
+  id: admin._id,
+  name: admin.name,
+  email: admin.email,
+  role: admin.role,
+  isActive: admin.isActive,
+  department: admin.department,
+  phone: admin.phone,
+  visiblePages: admin.visiblePages,
+});
+
+export const getBootstrapStatus = async (req, res) => {
+  try {
+    const configured = Boolean(process.env.ADMIN_BOOTSTRAP_SECRET);
+    const hasSuperadmin = await Admin.exists({ role: 'superadmin' });
+    return res.json({ success: true, available: configured && !hasSuperadmin });
+  } catch (error) {
+    console.error('Admin bootstrap status error:', error);
+    return res.status(500).json({ success: false, message: 'Could not check admin setup status.' });
+  }
+};
+
+// The bootstrap secret is only valid until the first superadmin is created.
 export const signUp = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const jwtSecret = getJwtSecret();
+    if (!jwtSecret) return res.status(503).json({ success: false, message: 'JWT authentication is not configured on the server.' });
+    const { name, email, password, bootstrapSecret } = req.body;
+    const expectedSecret = process.env.ADMIN_BOOTSTRAP_SECRET;
+    const suppliedSecret = typeof bootstrapSecret === 'string' ? bootstrapSecret : '';
+    if (!expectedSecret) {
+      return res.status(503).json({ success: false, message: 'Superadmin bootstrap is not configured.' });
+    }
+    const expected = Buffer.from(expectedSecret);
+    const supplied = Buffer.from(suppliedSecret);
+    if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+      return res.status(403).json({ success: false, message: 'Invalid admin bootstrap secret.' });
+    }
+    if (!name?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '') || typeof password !== 'string' || password.length < 12) {
+      return res.status(400).json({ success: false, message: 'Provide a name, valid email, and password of at least 12 characters.' });
+    }
+    if (await Admin.exists({ role: 'superadmin' })) {
+      return res.status(409).json({ success: false, message: 'The initial superadmin has already been created.' });
+    }
 
-    const existingAdmin = await Admin.findOne({ email });
-    if (existingAdmin) return res.status(400).json({ message: 'Email already exists' });
+    const normalizedEmail = email.trim().toLowerCase();
+    if (await Admin.findOne({ email: normalizedEmail })) {
+      return res.status(409).json({ success: false, message: 'Email already exists.' });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const newAdmin = new Admin({
-      name,
-      email,
+      name: name.trim(),
+      email: normalizedEmail,
       password: hashedPassword,
-      role,
+      role: 'superadmin',
     });
-
     await newAdmin.save();
 
-    res.status(201).json({ message: 'Admin created successfully' });
+    const token = jwt.sign({ id: newAdmin._id, type: 'admin' }, jwtSecret, { expiresIn: '8h' });
+    return res.status(201).json({ success: true, message: 'Superadmin created successfully.', token, admin: safeAdmin(newAdmin) });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Admin signup error:', error);
+    return res.status(500).json({ success: false, message: 'Could not create the initial superadmin.' });
   }
 };
 
 // Admin Signin
 export const signIn = async (req, res) => {
   try {
+    const jwtSecret = getJwtSecret();
+    if (!jwtSecret) return res.status(503).json({ success: false, message: 'JWT authentication is not configured on the server.' });
     const { email, password } = req.body;
 
-    const admin = await Admin.findOne({ email });
-    if (!admin) return res.status(404).json({ message: 'Admin not found' });
+    const admin = await Admin.findOne({ email: String(email || '').trim().toLowerCase() });
+    if (!admin || !admin.isActive) return res.status(401).json({ success: false, message: 'Invalid email or password.' });
 
-    const isMatch = await bcrypt.compare(password, admin.password);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+    const isMatch = typeof password === 'string' && await bcrypt.compare(password, admin.password);
+    if (!isMatch) return res.status(401).json({ success: false, message: 'Invalid email or password.' });
 
     const token = jwt.sign(
-      { id: admin._id, email: admin.email, role: admin.role },
-      JWT_SECRET,
-      { expiresIn: '1d' }
+      { id: admin._id, type: 'admin' },
+      jwtSecret,
+      { expiresIn: '8h' }
     );
 
-    res.status(200).json({ message: 'Login successful', token, admin });
+    return res.status(200).json({ success: true, message: 'Login successful.', token, admin: safeAdmin(admin) });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Admin signin error:', error);
+    return res.status(500).json({ success: false, message: 'Could not sign in.' });
   }
 };
 
 // Update Admin Info
 export const updateAdmin = async (req, res) => {
   try {
+    if (String(req.admin._id) !== req.params.id) {
+      return res.status(403).json({ success: false, message: 'You can only update your own admin profile.' });
+    }
     const adminId = req.params.id;
-    const updates = req.body;
-
-    if (updates.password) {
-      updates.password = await bcrypt.hash(updates.password, 10);
+    const updates = {};
+    if (typeof req.body.name === 'string' && req.body.name.trim()) updates.name = req.body.name.trim();
+    if (typeof req.body.phone === 'string') updates.phone = req.body.phone.trim();
+    if (typeof req.body.password === 'string' && req.body.password.length >= 12) {
+      updates.password = await bcrypt.hash(req.body.password, 12);
+    } else if (req.body.password !== undefined) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 12 characters.' });
     }
 
     const updatedAdmin = await Admin.findByIdAndUpdate(adminId, updates, {
       new: true,
       runValidators: true,
-    });
+    }).select('-password -resetCode -resetCodeExpires');
 
-    if (!updatedAdmin) return res.status(404).json({ message: 'Admin not found' });
+    if (!updatedAdmin) return res.status(404).json({ success: false, message: 'Admin not found.' });
 
-    res.status(200).json({ message: 'Admin updated successfully', admin: updatedAdmin });
+    return res.status(200).json({ success: true, message: 'Admin updated successfully.', admin: updatedAdmin });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Admin update error:', error);
+    return res.status(500).json({ success: false, message: 'Could not update the admin profile.' });
   }
 };
 
@@ -81,10 +134,12 @@ export const updateAdmin = async (req, res) => {
 
 export const sendAdminResetCode = async (req, res) => {
   const { email } = req.body;
-  console.log("📩 Admin reset request:", req.body);
 
   try {
-    const admin = await Admin.findOne({ email });
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(503).json({ success: false, message: 'Admin password reset email is not configured.' });
+    }
+    const admin = await Admin.findOne({ email: String(email || '').trim().toLowerCase() });
     if (!admin) return res.status(404).json({ message: "Admin not found" });
 
     // Generate reset code
@@ -132,12 +187,10 @@ export const sendAdminResetCode = async (req, res) => {
       `,
     });
 
-    console.log("✅ Admin reset email sent to", admin.email);
-
-    res.json({ message: "Admin reset code sent to email" });
+    return res.json({ success: true, message: "Admin reset code sent to email." });
   } catch (err) {
-    console.error("❌ Admin reset error:", err);
-    res.status(500).json({ message: err.message || "Server error" });
+    console.error('Admin reset email error:', err);
+    return res.status(500).json({ success: false, message: 'Could not send the admin reset code.' });
   }
 };
 
@@ -147,8 +200,11 @@ export const resetAdminPasswordWithCode = async (req, res) => {
   const { email, code, newPassword } = req.body;
 
   try {
+    if (typeof newPassword !== 'string' || newPassword.length < 12) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 12 characters.' });
+    }
     const admin = await Admin.findOne({
-      email,
+      email: String(email || '').trim().toLowerCase(),
       resetCode: code,
       resetCodeExpires: { $gt: Date.now() },
     });
@@ -156,7 +212,7 @@ export const resetAdminPasswordWithCode = async (req, res) => {
     if (!admin) return res.status(400).json({ message: 'Invalid or expired code' });
 
     // Hash new password
-    admin.password = await bcrypt.hash(newPassword, 10);
+    admin.password = await bcrypt.hash(newPassword, 12);
 
     // Clear code and expiry
     admin.resetCode = undefined;
@@ -164,9 +220,9 @@ export const resetAdminPasswordWithCode = async (req, res) => {
 
     await admin.save();
 
-    res.json({ message: 'Admin password reset successfully' });
+    return res.json({ success: true, message: 'Admin password reset successfully.' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    console.error('Admin password reset error:', err);
+    return res.status(500).json({ success: false, message: 'Could not reset the admin password.' });
   }
 };

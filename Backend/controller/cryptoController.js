@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from 'dotenv';
 import CryptoTransaction from '../model/cryptoModel.js';
+import { createPaginationMetadata, parsePagination } from '../utils/pagination.js';
 
 // Cloudinary Configuration
 dotenv.config();
@@ -62,8 +63,12 @@ export const createTransaction = async (req, res) => {
 // Get all transactions
 export const getAllTransactions = async (req, res) => {
   try {
-    const transactions = await CryptoTransaction.find();
-    res.json(transactions);
+    const { page, limit, skip } = parsePagination(req.query, 20, 50);
+    const [transactions, totalItems] = await Promise.all([
+      CryptoTransaction.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      CryptoTransaction.countDocuments(),
+    ]);
+    res.json({ success: true, data: transactions, pagination: createPaginationMetadata(totalItems, page, limit) });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

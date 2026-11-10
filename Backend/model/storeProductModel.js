@@ -1,0 +1,63 @@
+import mongoose from 'mongoose';
+
+const productSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  slug: { type: String, required: true, unique: true, trim: true },
+  productType: { type: String, enum: ['product', 'website', 'app', 'ios_app', 'full_stack', 'admin'], default: 'product', index: true },
+  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+  sellerContact: { type: String, default: '', trim: true, maxlength: 120 },
+  sellerListingStatus: { type: String, enum: ['approved', 'pending_review', 'rejected'], default: 'approved', index: true },
+  sellerReviewNote: { type: String, default: '', trim: true, maxlength: 500 },
+  promotionExpiresAt: { type: Date, default: null, index: true },
+  category: { type: String, default: 'general' },
+  description: { type: String, default: '' },
+  expectedDelivery: { type: String, default: '', trim: true, maxlength: 120 },
+  keyHighlights: [{ type: String, trim: true }],
+  specifications: [{
+    label: { type: String, trim: true },
+    value: { type: String, trim: true },
+    _id: false,
+  }],
+  packagingDetails: { type: String, default: '' },
+  price: { type: Number, required: true, min: 0 },
+  compareAtPrice: { type: Number, default: 0 },
+  discountPercent: { type: Number, default: 0, min: 0, max: 99.99 },
+  websiteUrl: { type: String, default: '', trim: true },
+  apkUrl: { type: String, default: '', trim: true },
+  iosAppUrl: { type: String, default: '', trim: true },
+  sourceCodeUrl: { type: String, default: '', trim: true },
+  sourceCodeCloudinaryUrl: { type: String, default: '', trim: true },
+  templateSourceCodeUrl: { type: String, default: '', trim: true },
+  templateSourceCodeCloudinaryUrl: { type: String, default: '', trim: true },
+  sourceArchiveVersion: { type: Number, default: 1 },
+  documents: [{
+    name: { type: String, required: true, trim: true, maxlength: 180 },
+    url: { type: String, required: true, trim: true },
+    cloudinaryUrl: { type: String, default: '', trim: true },
+    mimeType: { type: String, required: true, trim: true },
+    _id: false,
+  }],
+  templateDocuments: [{
+    name: { type: String, required: true, trim: true, maxlength: 180 },
+    url: { type: String, required: true, trim: true },
+    cloudinaryUrl: { type: String, default: '', trim: true },
+    mimeType: { type: String, required: true, trim: true },
+    _id: false,
+  }],
+  screenshots: [{ type: String, trim: true }],
+  usageInstructions: { type: String, default: '', trim: true, maxlength: 5000 },
+  usePrice: { type: Number, default: 0, min: 0 },
+  templatePrice: { type: Number, default: 0, min: 0 },
+  condition: { type: String, enum: ['brand_new', 'used'], default: 'brand_new' },
+  isSold: { type: Boolean, default: false },
+  image: { type: String, default: '' },
+  images: [{ type: String, trim: true }],
+  colors: [{ type: String, trim: true }],
+  stock: { type: Number, default: 0 },
+  isActive: { type: Boolean, default: true },
+  tags: [{ type: String }],
+}, { timestamps: true });
+
+const StoreProduct = mongoose.model('StoreProduct', productSchema);
+
+export default StoreProduct;

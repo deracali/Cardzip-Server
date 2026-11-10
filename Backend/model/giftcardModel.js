@@ -25,6 +25,11 @@ const GiftCardModal = new Schema({
     type: String,
     trim: true
   },
+  logo: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   color: {
     type: String,
     required: true,

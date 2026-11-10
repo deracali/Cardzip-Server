@@ -9,6 +9,10 @@ const giftCardSchema = new mongoose.Schema({
 
   ngnAmount: Number,
   exchangeRate: Number,
+  catalogCardId: { type: mongoose.Schema.Types.ObjectId, ref: 'Cards', default: null },
+  region: { type: String, trim: true, default: '' },
+  cardType: { type: String, trim: true, default: '' },
+  cardLogo: { type: String, trim: true, default: '' },
 
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
@@ -49,6 +53,8 @@ const giftCardSchema = new mongoose.Schema({
   phoneNumber: { type: String, trim: true },
 
   paymentMethod: String,
+  submittedVia: { type: String, enum: ['app', 'telegram'], default: 'app' },
+  telegramSubmissionId: { type: String, unique: true, sparse: true, index: true },
   cryptoPayout: Number,
   walletAddress: { type: String, trim: true },
 

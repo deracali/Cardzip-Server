@@ -12,6 +12,8 @@ const shopSchema = new mongoose.Schema({
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
   reviewNote: { type: String, default: '', trim: true, maxlength: 500 },
   reviewedAt: { type: Date, default: null },
+  moderationStatus: { type: String, enum: ['active', 'suspended'], default: 'active', index: true },
+  moderationReason: { type: String, default: '', trim: true, maxlength: 500 },
 }, { timestamps: true });
 
 shopSchema.index({ status: 1, createdAt: -1 });

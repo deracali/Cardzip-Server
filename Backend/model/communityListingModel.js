@@ -13,6 +13,8 @@ const communityListingSchema = new mongoose.Schema({
   seller: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   sellerName: { type: String, required: true, trim: true, maxlength: 120 },
   isActive: { type: Boolean, default: true, index: true },
+  moderationStatus: { type: String, enum: ['active', 'suspended'], default: 'active', index: true },
+  moderationReason: { type: String, default: '', trim: true, maxlength: 500 },
   promotionExpiresAt: { type: Date, default: null, index: true },
 }, { timestamps: true });
 

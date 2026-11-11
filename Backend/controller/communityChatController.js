@@ -18,7 +18,12 @@ export const startCommunityConversation = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Choose a valid community listing.' });
   }
   try {
-    const listing = await CommunityListing.findOne({ _id: listingId, isActive: true, isSold: false })
+    const listing = await CommunityListing.findOne({
+      _id: listingId,
+      isActive: true,
+      moderationStatus: { $ne: 'suspended' },
+      isSold: false,
+    })
       .select('_id seller').lean();
     if (!listing) return res.status(404).json({ success: false, message: 'This listing is unavailable for chat.' });
     if (String(listing.seller) === String(req.authUserId)) {

@@ -277,12 +277,14 @@ export const initializePaystackPayment = async (req, res) => {
             productType: { $in: ['website', 'app', 'ios_app', 'full_stack', 'admin'] },
             sellerListingStatus: 'approved',
             isActive: true,
+            moderationStatus: { $ne: 'suspended' },
             isSold: false,
           }).select('_id name')
           : CommunityListing.findOne({
             _id: targetId,
             seller: req.authUserId,
             isActive: true,
+            moderationStatus: { $ne: 'suspended' },
             isSold: false,
           }).select('_id title'),
         CommunityPromotionPricing.findOneAndUpdate(
@@ -321,6 +323,7 @@ export const initializePaystackPayment = async (req, res) => {
         _id: productId,
         productType: { $in: ['website', 'app', 'ios_app', 'full_stack', 'admin'] },
         isActive: true,
+        moderationStatus: { $ne: 'suspended' },
       }).select('_id name productType usePrice templatePrice');
       if (!product) return res.status(404).json({ success: false, message: 'This website or app is no longer available.' });
       const paymentFilter = {
@@ -390,6 +393,7 @@ export const initializePaystackPayment = async (req, res) => {
         owner: { $ne: null },
         sellerListingStatus: 'approved',
         isActive: true,
+        moderationStatus: { $ne: 'suspended' },
         isSold: false,
       }).select('_id name productType owner price usePrice templatePrice sourceCodeUrl templateSourceCodeUrl sourceArchiveVersion');
       if (!product || String(product.owner) === String(req.authUserId)) {
@@ -785,12 +789,14 @@ export const verifyPaystackPayment = async (req, res) => {
               productType: { $in: ['website', 'app', 'ios_app', 'full_stack', 'admin'] },
               sellerListingStatus: 'approved',
               isActive: true,
+              moderationStatus: { $ne: 'suspended' },
               isSold: false,
             }).session(session)
             : await CommunityListing.findOne({
               _id: promotionDetails?.listingId,
               seller: currentPayment.user,
               isActive: true,
+              moderationStatus: { $ne: 'suspended' },
               isSold: false,
             }).session(session);
           if (!target || !['day', 'week', 'month'].includes(promotionDetails?.duration)
@@ -826,6 +832,7 @@ export const verifyPaystackPayment = async (req, res) => {
             _id: purchaseDetails?.productId,
             productType: { $in: ['website', 'app', 'ios_app', 'full_stack', 'admin'] },
             isActive: true,
+            moderationStatus: { $ne: 'suspended' },
           }).select('_id name slug productType websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl sourceArchiveVersion documents templateDocuments').session(session);
           if (!product || !['use', 'template'].includes(purchaseDetails?.purchaseType)) {
             const transactionError = new Error('The digital product is unavailable; contact support with this payment reference.');
@@ -867,6 +874,7 @@ export const verifyPaystackPayment = async (req, res) => {
             owner: purchaseDetails?.sellerId,
             sellerListingStatus: 'approved',
             isActive: true,
+            moderationStatus: { $ne: 'suspended' },
             isSold: false,
           }).select('_id name productType owner price usePrice templatePrice websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl sourceArchiveVersion documents templateDocuments screenshots').session(session);
           const purchaseSourceCodeUrl = purchaseType === 'template'

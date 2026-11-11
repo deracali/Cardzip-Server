@@ -32,6 +32,7 @@ import { clockInStaff, clockOutStaff, getMyStaffAttendance, listStaffAttendance 
 import { listAdminSupportRequests, updateAdminSupportRequest } from '../controller/supportRequestController.js';
 import { getCompanyExpenses, payCompanyExpense } from '../controller/companyExpenseController.js';
 import { getAdminFeatureSettings, updateFeatureSettings } from '../controller/featureSettingsController.js';
+import { listAdminReports, updateAdminReport } from '../controller/reportController.js';
 
 const adminRoute = express.Router();
 
@@ -41,6 +42,8 @@ adminRoute.post('/signin', signIn);
 adminRoute.post('/reset-code', sendAdminResetCode);
 adminRoute.post('/reset-password', resetAdminPasswordWithCode);
 adminRoute.use(authenticateAdmin);
+adminRoute.get('/reports', requireAdministrator, listAdminReports);
+adminRoute.patch('/reports/:id', requireAdministrator, updateAdminReport);
 adminRoute.get('/me', getAdminProfile);
 adminRoute.get('/feature-settings', requireAdministrator, getAdminFeatureSettings);
 adminRoute.put('/feature-settings', requireAdministrator, updateFeatureSettings);

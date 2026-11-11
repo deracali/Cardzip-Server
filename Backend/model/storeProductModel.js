@@ -55,6 +55,8 @@ const productSchema = new mongoose.Schema({
   colors: [{ type: String, trim: true }],
   stock: { type: Number, default: 0 },
   isActive: { type: Boolean, default: true },
+  moderationStatus: { type: String, enum: ['active', 'suspended'], default: 'active', index: true },
+  moderationReason: { type: String, default: '', trim: true, maxlength: 500 },
   tags: [{ type: String }],
 }, { timestamps: true });
 

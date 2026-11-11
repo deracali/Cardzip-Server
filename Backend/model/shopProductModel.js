@@ -12,6 +12,8 @@ const shopProductSchema = new mongoose.Schema({
   condition: { type: String, enum: ['brand_new', 'used'], default: 'brand_new' },
   stock: { type: Number, required: true, min: 0, default: 1 },
   isActive: { type: Boolean, default: true, index: true },
+  moderationStatus: { type: String, enum: ['active', 'suspended'], default: 'active', index: true },
+  moderationReason: { type: String, default: '', trim: true, maxlength: 500 },
 }, { timestamps: true });
 
 shopProductSchema.index({ shop: 1, isActive: 1, createdAt: -1 });

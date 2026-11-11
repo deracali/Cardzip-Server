@@ -84,7 +84,7 @@ const parseListingPreferences = (rawPreferences) => {
 export const getCommunityListings = async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query, 20, 50);
-    const filter = { isActive: true };
+    const filter = { isActive: true, moderationStatus: { $ne: 'suspended' } };
     const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : '';
     const { categories, searches } = parseListingPreferences(req.query.preferences);
     if (search) {
@@ -156,7 +156,7 @@ export const getCommunityListings = async (req, res) => {
         .limit(1000)
         .populate({
           path: 'digitalAsset',
-          match: { isActive: true, isSold: false, sellerListingStatus: 'approved' },
+          match: { isActive: true, moderationStatus: { $ne: 'suspended' }, isSold: false, sellerListingStatus: 'approved' },
           select: '_id name slug productType category description price image createdAt promotionExpiresAt',
         })
         .lean(),
@@ -319,10 +319,14 @@ export const getCommunityListing = async (req, res) => {
   }
   try {
     const listing = await CommunityListing.findOne({ _id: req.params.id, isActive: true })
-      .select('title category description price condition isSold phone imageUrl images seller sellerName createdAt promotionExpiresAt')
+      .select('title category description price condition isSold phone imageUrl images seller sellerName createdAt promotionExpiresAt moderationStatus')
       .populate('seller', 'profileImage')
       .lean();
     if (!listing) return res.status(404).json({ success: false, message: 'This community listing could not be found.' });
+    if (listing.moderationStatus === 'suspended') {
+      return res.status(404).json({ success: false, message: 'This community listing is unavailable.' });
+    }
+    delete listing.moderationStatus;
     const { seller, ...publicListing } = listing;
     return res.json({
       success: true,
@@ -349,7 +353,12 @@ export const getMyCommunityListings = async (req, res) => {
     ]);
     return res.json({
       success: true,
-      data: listings.map(({ seller, ...listing }) => ({ ...listing, sellerId: String(seller) })),
+      data: listings.map(({ seller, ...listing }) => ({
+        ...listing,
+        sellerId: String(seller),
+        moderationStatus: listing.moderationStatus || 'active',
+        moderationReason: listing.moderationReason || '',
+      })),
       pagination: createPaginationMetadata(totalItems, page, limit),
     });
   } catch (error) {
@@ -363,7 +372,11 @@ export const getRelatedCommunityListings = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Provide a valid listing ID.' });
   }
   try {
-    const listing = await CommunityListing.findOne({ _id: req.params.id, isActive: true }).select('title category').lean();
+    const listing = await CommunityListing.findOne({
+      _id: req.params.id,
+      isActive: true,
+      moderationStatus: { $ne: 'suspended' },
+    }).select('title category').lean();
     if (!listing) return res.status(404).json({ success: false, message: 'This community listing could not be found.' });
     const titleTerms = listing.title.split(/\s+/).filter((term) => term.length >= 3).slice(0, 5);
     const similarity = [];
@@ -374,7 +387,13 @@ export const getRelatedCommunityListings = async (req, res) => {
     if (!similarity.length) return res.json({ success: true, data: [] });
     const now = new Date();
     const related = await CommunityListing.aggregate([
-      { $match: { _id: { $ne: new mongoose.Types.ObjectId(req.params.id) }, isActive: true, isSold: false, $or: similarity } },
+      { $match: {
+        _id: { $ne: new mongoose.Types.ObjectId(req.params.id) },
+        isActive: true,
+        moderationStatus: { $ne: 'suspended' },
+        isSold: false,
+        $or: similarity,
+      } },
       {
         $addFields: {
           categoryRank: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$category', ''] } }, listing.category?.toLowerCase() || ''] }, 1, 0] },
@@ -511,7 +530,11 @@ export const reviewAdminCommunityPromotion = async (req, res) => {
           sellerListingStatus: 'approved',
           owner: promotion.advertiser,
         }).session(session)
-        : await CommunityListing.findOne({ _id: promotion.listing, isActive: true }).session(session);
+        : await CommunityListing.findOne({
+          _id: promotion.listing,
+          isActive: true,
+          moderationStatus: { $ne: 'suspended' },
+        }).session(session);
       if (!target) {
         const reviewError = new Error('The listing is unavailable and cannot be promoted.');
         reviewError.statusCode = 409;

@@ -79,6 +79,8 @@ const ownerShop = (shop) => ({
   ...publicShop(shop),
   status: shop.status,
   reviewNote: shop.reviewNote,
+  moderationStatus: shop.moderationStatus || 'active',
+  moderationReason: shop.moderationReason || '',
 });
 
 const normalizeProductInput = (body) => {
@@ -117,9 +119,9 @@ export const listShops = async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query, 12, 50);
     const [shops, totalItems] = await Promise.all([
-      Shop.find({ status: 'approved' }).select('shopType businessName slug address contactPhone description bannerImage createdAt')
+      Shop.find({ status: 'approved', moderationStatus: { $ne: 'suspended' } }).select('shopType businessName slug address contactPhone description bannerImage createdAt')
         .sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      Shop.countDocuments({ status: 'approved' }),
+      Shop.countDocuments({ status: 'approved', moderationStatus: { $ne: 'suspended' } }),
     ]);
     return res.json({
       success: true,
@@ -134,9 +136,9 @@ export const listShops = async (req, res) => {
 
 export const getShopBySlug = async (req, res) => {
   try {
-    const shop = await Shop.findOne({ slug: req.params.slug, status: 'approved' })
+    const shop = await Shop.findOne({ slug: req.params.slug, status: 'approved', moderationStatus: { $ne: 'suspended' } })
       .select('shopType businessName slug address contactPhone description bannerImage createdAt').lean();
-    if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
+    if (!shop) return res.status(404).json({ success: false, message: 'Shop is unavailable or could not be found.' });
     return res.json({ success: true, data: shop });
   } catch (error) {
     console.error('Get public shop error:', error);
@@ -146,12 +148,12 @@ export const getShopBySlug = async (req, res) => {
 
 export const listShopProducts = async (req, res) => {
   try {
-    const shop = await Shop.findOne({ slug: req.params.slug, status: 'approved' }).select('_id').lean();
-    if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
+    const shop = await Shop.findOne({ slug: req.params.slug, status: 'approved', moderationStatus: { $ne: 'suspended' } }).select('_id').lean();
+    if (!shop) return res.status(404).json({ success: false, message: 'Shop is unavailable or could not be found.' });
     const { page, limit, skip } = parsePagination(req.query, 12, 50);
-    const filter = { shop: shop._id, isActive: true, stock: { $gt: 0 } };
+    const filter = { shop: shop._id, isActive: true, moderationStatus: { $ne: 'suspended' }, stock: { $gt: 0 } };
     const [products, totalItems] = await Promise.all([
-      ShopProduct.find(filter).select('-shop -__v').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      ShopProduct.find(filter).select('-shop -__v -moderationStatus -moderationReason').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       ShopProduct.countDocuments(filter),
     ]);
     return res.json({
@@ -171,16 +173,18 @@ export const getShopProductBySlug = async (req, res) => {
       slug: req.params.slug,
       status: 'approved',
       shopType: 'store',
+      moderationStatus: { $ne: 'suspended' },
     }).select('shopType businessName slug address contactPhone description bannerImage').lean();
-    if (!shop) return res.status(404).json({ success: false, message: 'Shop not found.' });
+    if (!shop) return res.status(404).json({ success: false, message: 'Shop is unavailable or could not be found.' });
 
     const product = await ShopProduct.findOne({
       shop: shop._id,
       slug: req.params.productSlug,
       isActive: true,
+      moderationStatus: { $ne: 'suspended' },
       stock: { $gt: 0 },
-    }).select('-__v').lean();
-    if (!product) return res.status(404).json({ success: false, message: 'Product not found.' });
+    }).select('-__v -moderationStatus -moderationReason').lean();
+    if (!product) return res.status(404).json({ success: false, message: 'Product is unavailable or could not be found.' });
     if (!product.images?.length && product.imageUrl) product.images = [product.imageUrl];
     return res.json({ success: true, data: { product, shop } });
   } catch (error) {
@@ -191,7 +195,7 @@ export const getShopProductBySlug = async (req, res) => {
 
 export const listPublicShopAppointments = async (req, res) => {
   try {
-    const shop = await Shop.findOne({ slug: req.params.slug, status: 'approved', shopType: 'business' }).select('_id').lean();
+    const shop = await Shop.findOne({ slug: req.params.slug, status: 'approved', shopType: 'business', moderationStatus: { $ne: 'suspended' } }).select('_id').lean();
     if (!shop) return res.status(404).json({ success: false, message: 'Business page not found.' });
     const appointments = await ShopAppointment.find({
       shop: shop._id,
@@ -307,7 +311,7 @@ export const bookShopAppointment = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Appointment time is invalid.' });
   }
   try {
-    const shop = await Shop.findOne({ slug: req.params.slug, status: 'approved', shopType: 'business' })
+    const shop = await Shop.findOne({ slug: req.params.slug, status: 'approved', shopType: 'business', moderationStatus: { $ne: 'suspended' } })
       .select('_id owner businessName').lean();
     if (!shop) return res.status(404).json({ success: false, message: 'Business page not found.' });
     if (String(shop.owner) === String(req.authUserId)) {
@@ -439,7 +443,12 @@ export const getMyShop = async (req, res) => {
   try {
     const shop = await Shop.findOne({ owner: req.authUserId }).sort({ createdAt: -1 }).lean();
     if (!shop) return res.json({ success: true, data: null });
-    const products = await ShopProduct.find({ shop: shop._id }).sort({ createdAt: -1 }).lean();
+    const products = (await ShopProduct.find({ shop: shop._id }).sort({ createdAt: -1 }).lean())
+      .map((product) => ({
+        ...product,
+        moderationStatus: product.moderationStatus || 'active',
+        moderationReason: product.moderationReason || '',
+      }));
     return res.json({ success: true, data: { shop: ownerShop(shop), products } });
   } catch (error) {
     console.error('Get owner shop error:', error);

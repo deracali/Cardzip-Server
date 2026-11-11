@@ -337,6 +337,8 @@ const sanitizePublicDigitalAsset = (product) => {
   delete publicProduct.sourceCodeCloudinaryUrl;
   delete publicProduct.templateSourceCodeUrl;
   delete publicProduct.templateSourceCodeCloudinaryUrl;
+  delete publicProduct.moderationStatus;
+  delete publicProduct.moderationReason;
   publicProduct.isPromoted = Boolean(
     DIGITAL_ASSET_TYPES.includes(publicProduct.productType)
     && publicProduct.promotionExpiresAt
@@ -503,11 +505,18 @@ export const createSellerDigitalAsset = async (req, res) => {
 export const getMyDigitalAssets = async (req, res) => {
   try {
     const assets = await StoreProduct.find({ owner: req.authUserId })
-      .select('name slug productType category description price usePrice templatePrice sellerListingStatus sellerReviewNote image createdAt')
+      .select('name slug productType category description price usePrice templatePrice sellerListingStatus sellerReviewNote moderationStatus moderationReason image createdAt')
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
-    return res.json({ success: true, data: assets });
+    return res.json({
+      success: true,
+      data: assets.map((asset) => ({
+        ...asset,
+        moderationStatus: asset.moderationStatus || 'active',
+        moderationReason: asset.moderationReason || '',
+      })),
+    });
   } catch (error) {
     console.error('Get my digital listings error:', error);
     return res.status(500).json({ success: false, message: 'Could not load your digital listings.' });
@@ -725,7 +734,7 @@ export const prepareStoreOrder = async ({ items, shippingAddress }) => {
   let subtotal = 0;
   for (const item of items) {
     const product = await StoreProduct.findById(item.productId || item.id);
-    if (!product || !product.isActive || product.isSold || LEGACY_DEMO_PRODUCT_SLUGS.includes(product.slug)) {
+    if (!product || !product.isActive || product.moderationStatus === 'suspended' || product.isSold || LEGACY_DEMO_PRODUCT_SLUGS.includes(product.slug)) {
       throw createStoreOrderError(`Product ${item.name || 'selected'} is unavailable.`, 409);
     }
     const quantity = Number(item.quantity);
@@ -773,7 +782,13 @@ export const prepareStoreOrder = async ({ items, shippingAddress }) => {
 export const reserveStoreOrderItems = async (items, session) => {
   for (const item of items) {
     const result = await StoreProduct.updateOne(
-      { _id: item.product, isActive: true, isSold: { $ne: true }, stock: { $gte: item.quantity } },
+      {
+        _id: item.product,
+        isActive: true,
+        moderationStatus: { $ne: 'suspended' },
+        isSold: { $ne: true },
+        stock: { $gte: item.quantity },
+      },
       { $inc: { stock: -item.quantity } },
       { session },
     );
@@ -821,6 +836,7 @@ export const getStoreProducts = async (req, res) => {
       : 'product';
     const baseFilter = {
       isActive: true,
+      moderationStatus: { $ne: 'suspended' },
       slug: { $nin: LEGACY_DEMO_PRODUCT_SLUGS },
       $and: [
         {
@@ -949,6 +965,7 @@ export const getStoreProductBySlug = async (req, res) => {
     const product = await StoreProduct.findOne({
       slug: req.params.slug,
       isActive: true,
+      moderationStatus: { $ne: 'suspended' },
       $or: [
         { owner: null },
         {
@@ -957,7 +974,7 @@ export const getStoreProductBySlug = async (req, res) => {
         },
       ],
     });
-    if (!product) return res.status(404).json({ success: false, message: 'Product not found.' });
+    if (!product) return res.status(404).json({ success: false, message: 'Product is unavailable or could not be found.' });
     const publicProduct = sanitizePublicDigitalAsset(product);
     return res.json({ success: true, data: publicProduct });
   } catch (error) {
@@ -1482,8 +1499,8 @@ export const getAdminStoreDashboard = async (req, res) => {
         { $group: { _id: null, total: { $sum: '$total' } } },
       ]),
       StoreOrder.countDocuments({ paymentStatus: 'paid', status: 'processing' }),
-      StoreProduct.countDocuments({ isActive: true, slug: { $nin: LEGACY_DEMO_PRODUCT_SLUGS } }),
-      StoreProduct.countDocuments({ isActive: true, stock: { $lte: 5 }, slug: { $nin: LEGACY_DEMO_PRODUCT_SLUGS } }),
+      StoreProduct.countDocuments({ isActive: true, moderationStatus: { $ne: 'suspended' }, slug: { $nin: LEGACY_DEMO_PRODUCT_SLUGS } }),
+      StoreProduct.countDocuments({ isActive: true, moderationStatus: { $ne: 'suspended' }, stock: { $lte: 5 }, slug: { $nin: LEGACY_DEMO_PRODUCT_SLUGS } }),
     ]);
     const totalPages = Math.max(1, Math.ceil(totalOrders / limit));
     return res.json({

@@ -4,7 +4,7 @@ import CommunityListingReview from '../model/communityListingReviewModel.js';
 
 const findActiveListing = async (id) => {
   if (!mongoose.isValidObjectId(id)) return null;
-  return CommunityListing.findOne({ _id: id, isActive: true }).select('_id seller');
+  return CommunityListing.findOne({ _id: id, isActive: true, moderationStatus: { $ne: 'suspended' } }).select('_id seller');
 };
 
 const formatReview = (review) => ({

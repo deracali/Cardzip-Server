@@ -244,31 +244,22 @@ const isCloudinaryRawAssetUrl = (value) => {
 };
 const uploadProductFileToCloudinary = async (file, folder, extension) => {
   const source = file.tempFilePath || `data:${file.mimetype};base64,${file.data.toString('base64')}`;
-  const uploaded = await cloudinary.uploader.upload(source, {
+  const options = {
     folder,
     resource_type: 'raw',
     public_id: `${randomUUID()}${extension}`,
     use_filename: false,
     unique_filename: false,
-  });
+  };
+  const uploaded = file.size > MAX_CLOUDINARY_PRODUCT_FILE_SIZE
+    ? await cloudinary.uploader.upload_large(source, { ...options, chunk_size: 20 * 1024 * 1024 })
+    : await cloudinary.uploader.upload(source, options);
   if (!isSecureDigitalAssetUrl(uploaded.secure_url)) {
     throw new Error('Cloudinary returned an invalid product file URL.');
   }
   return uploaded.secure_url;
 };
 const uploadProductFileToPreferredStorage = async (file, folder, extension) => {
-  if (file.size > MAX_CLOUDINARY_PRODUCT_FILE_SIZE) {
-    if (!isR2StorageConfigured()) {
-      const error = new Error('R2 storage must be configured for product files over 100 MB.');
-      error.code = 'R2_STORAGE_NOT_CONFIGURED';
-      throw error;
-    }
-    return {
-      url: await uploadProductFileToR2(file, extension),
-      cloudinaryUrl: '',
-    };
-  }
-
   let cloudinaryUrl = '';
   let cloudinaryError;
   try {

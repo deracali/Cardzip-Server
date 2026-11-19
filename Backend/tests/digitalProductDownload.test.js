@@ -28,6 +28,7 @@ const originalPaystackSecret = process.env.PAYSTACK_SECRET_KEY;
 const originalCloudinaryName = process.env.CLOUDINARY_CLOUD_NAME;
 const originalCloudinaryConfig = { ...cloudinary.config() };
 const originalCloudinaryUpload = cloudinary.uploader.upload;
+const originalCloudinaryUploadLarge = cloudinary.uploader.upload_large;
 const originalS3Send = S3Client.prototype.send;
 const originalR2Environment = {
   accountId: process.env.R2_ACCOUNT_ID,
@@ -151,6 +152,7 @@ afterEach(() => {
   else process.env.CLOUDINARY_CLOUD_NAME = originalCloudinaryName;
   cloudinary.config(originalCloudinaryConfig);
   cloudinary.uploader.upload = originalCloudinaryUpload;
+  cloudinary.uploader.upload_large = originalCloudinaryUploadLarge;
   S3Client.prototype.send = originalS3Send;
   for (const [key, environmentName] of Object.entries({
     accountId: 'R2_ACCOUNT_ID',
@@ -301,16 +303,23 @@ test('uploads product files to Cloudinary first and mirrors them to R2', async (
   assert.deepEqual(uploadOrder, ['cloudinary', 'r2', 'cloudinary', 'r2']);
 });
 
-test('uploads full-template ZIPs over 100 MB directly to R2', async () => {
+test('uploads full-template ZIPs over 100 MB to Cloudinary in chunks', async () => {
   process.env.R2_ACCOUNT_ID = 'test-account';
   process.env.R2_ACCESS_KEY_ID = 'test-access-key';
   process.env.R2_SECRET_ACCESS_KEY = 'test-secret-key';
   process.env.R2_BUCKET_NAME = 'private-products';
-  let cloudinaryCalled = false;
+  let standardUploadCalled = false;
   let uploadedCommand;
   cloudinary.uploader.upload = async () => {
-    cloudinaryCalled = true;
-    throw new Error('Cloudinary should not receive large archives');
+    standardUploadCalled = true;
+    throw new Error('Large archives must use chunked upload');
+  };
+  let chunkOptions;
+  cloudinary.uploader.upload_large = async (_source, options) => {
+    chunkOptions = options;
+    return {
+      secure_url: `https://res.cloudinary.com/test/raw/upload/v1/${options.public_id}`,
+    };
   };
   S3Client.prototype.send = async (command) => {
     uploadedCommand = command;
@@ -329,9 +338,11 @@ test('uploads full-template ZIPs over 100 MB directly to R2', async () => {
   }, response);
 
   assert.equal(response.statusCode, 201);
-  assert.equal(cloudinaryCalled, false);
+  assert.equal(standardUploadCalled, false);
+  assert.equal(chunkOptions.chunk_size, 20 * 1024 * 1024);
+  assert.equal(chunkOptions.resource_type, 'raw');
   assert.match(response.payload.data.sourceCodeUrl, /^r2:\/\/cardzip\/product-files\/.+\.zip$/i);
-  assert.equal(response.payload.data.sourceCodeCloudinaryUrl, '');
+  assert.match(response.payload.data.sourceCodeCloudinaryUrl, /^https:\/\/res\.cloudinary\.com\/test\/raw\/upload\/v1\/.+\.zip$/i);
   assert.equal(uploadedCommand.input.ContentLength, 101 * 1024 * 1024);
 });
 

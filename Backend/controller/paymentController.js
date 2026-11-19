@@ -50,6 +50,9 @@ const isProductArchiveUrl = (value) => {
   const cloudinaryUrl = getCloudinaryRawAssetUrl(value);
   return Boolean(cloudinaryUrl && /\.zip$/i.test(cloudinaryUrl.pathname));
 };
+const hasTemplateSourceCode = (product) => isProductArchiveUrl(getTemplateSourceCodeUrl(product))
+  || (Array.isArray(product.templateSourceCodeParts)
+    && product.templateSourceCodeParts.some((part) => isProductArchiveUrl(part.url)));
 const isCloudinaryDeliveryUrl = (url) => url.protocol === 'https:'
   && (url.hostname === 'cloudinary.com' || url.hostname.endsWith('.cloudinary.com'))
   && !url.port && !url.username && !url.password;
@@ -122,7 +125,7 @@ const requestPaystack = async (url, { method = 'GET', body } = {}) => {
 const getDigitalProductReceipt = async (payment, session) => {
   const purchaseDetails = payment.metadata;
   if (!mongoose.isValidObjectId(purchaseDetails?.productId)) return null;
-  let query = StoreProduct.findById(purchaseDetails.productId).select('_id name slug productType websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl sourceArchiveVersion documents templateDocuments');
+  let query = StoreProduct.findById(purchaseDetails.productId).select('_id name slug productType websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl templateSourceCodeParts sourceArchiveVersion documents');
   if (session) query = query.session(session);
   const product = await query;
   if (!product) return null;
@@ -135,7 +138,7 @@ const getDigitalProductReceipt = async (payment, session) => {
     ...(purchaseDetails.purchaseType === 'use' && product.sourceCodeUrl
       ? { sourceCodeAvailable: true }
       : {}),
-    ...(purchaseDetails.purchaseType === 'template' && getTemplateSourceCodeUrl(product)
+    ...(purchaseDetails.purchaseType === 'template' && hasTemplateSourceCode(product)
       ? { templateSourceCodeAvailable: true }
       : {}),
     ...((purchaseDetails.purchaseType === 'template' ? getTemplateSourceCodeUrl(product) : product.sourceCodeUrl)
@@ -144,9 +147,9 @@ const getDigitalProductReceipt = async (payment, session) => {
     ...(purchaseDetails.purchaseType === 'use'
       ? { accessUrl: product.productType === 'app' ? product.apkUrl : product.productType === 'ios_app' ? product.iosAppUrl : product.websiteUrl }
       : {}),
-    documents: product.documents.map(({ name, mimeType }) => ({ name, mimeType })),
+    documents: (product.documents || []).map(({ name, mimeType }) => ({ name, mimeType })),
     ...(purchaseDetails.purchaseType === 'template'
-      ? { templateDocuments: (product.templateDocuments || []).map(({ name, mimeType }) => ({ name, mimeType })) }
+      ? { templateSourceCodeParts: (product.templateSourceCodeParts || []).map(({ name, mimeType }) => ({ name, mimeType })) }
       : {}),
   };
 };
@@ -156,7 +159,7 @@ const getSellerDigitalAssetReceipt = async (payment, session) => {
   const purchaseType = purchaseDetails.purchaseType || 'use';
   if (!mongoose.isValidObjectId(purchaseDetails?.productId)) return null;
   let query = StoreProduct.findById(purchaseDetails.productId)
-    .select('_id name slug productType websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl sourceArchiveVersion documents templateDocuments screenshots price usePrice templatePrice');
+    .select('_id name slug productType websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl templateSourceCodeParts sourceArchiveVersion documents screenshots price usePrice templatePrice');
   if (session) query = query.session(session);
   const product = await query;
   if (!product) return null;
@@ -179,13 +182,13 @@ const getSellerDigitalAssetReceipt = async (payment, session) => {
     ...(purchaseType === 'use'
       ? {
         sourceCodeAvailable: Boolean(product.sourceCodeUrl),
-        documents: (product.documents || []).map(({ name, mimeType }) => ({ name, mimeType })),
       }
       : {
         sourceCodeAvailable: Boolean(getTemplateSourceCodeUrl(product)),
-        templateSourceCodeAvailable: Boolean(getTemplateSourceCodeUrl(product)),
-        templateDocuments: (product.templateDocuments || []).map(({ name, mimeType }) => ({ name, mimeType })),
+        templateSourceCodeAvailable: hasTemplateSourceCode(product),
+        templateSourceCodeParts: (product.templateSourceCodeParts || []).map(({ name, mimeType }) => ({ name, mimeType })),
       }),
+    documents: (product.documents || []).map(({ name, mimeType }) => ({ name, mimeType })),
   };
 };
 
@@ -395,12 +398,14 @@ export const initializePaystackPayment = async (req, res) => {
         isActive: true,
         moderationStatus: { $ne: 'suspended' },
         isSold: false,
-      }).select('_id name productType owner price usePrice templatePrice sourceCodeUrl templateSourceCodeUrl sourceArchiveVersion');
+      }).select('_id name productType owner price usePrice templatePrice sourceCodeUrl templateSourceCodeUrl templateSourceCodeParts sourceArchiveVersion');
       if (!product || String(product.owner) === String(req.authUserId)) {
         return res.status(404).json({ success: false, message: 'This seller digital listing is not available for purchase.' });
       }
-      const sourceCodeUrl = purchaseType === 'template' ? getTemplateSourceCodeUrl(product) : product.sourceCodeUrl;
-      if (!isProductArchiveUrl(sourceCodeUrl)) {
+      const sourceCodeReady = purchaseType === 'template'
+        ? hasTemplateSourceCode(product)
+        : isProductArchiveUrl(product.sourceCodeUrl);
+      if (!sourceCodeReady) {
         return res.status(409).json({ success: false, message: 'This listing is not ready for checkout yet.' });
       }
       amount = Number(purchaseType === 'template'
@@ -833,7 +838,7 @@ export const verifyPaystackPayment = async (req, res) => {
             productType: { $in: ['website', 'app', 'ios_app', 'full_stack', 'admin'] },
             isActive: true,
             moderationStatus: { $ne: 'suspended' },
-          }).select('_id name slug productType websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl sourceArchiveVersion documents templateDocuments').session(session);
+          }).select('_id name slug productType websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl templateSourceCodeParts sourceArchiveVersion documents').session(session);
           if (!product || !['use', 'template'].includes(purchaseDetails?.purchaseType)) {
             const transactionError = new Error('The digital product is unavailable; contact support with this payment reference.');
             transactionError.statusCode = 409;
@@ -852,7 +857,7 @@ export const verifyPaystackPayment = async (req, res) => {
               ...(purchaseDetails.purchaseType === 'use' && product.sourceCodeUrl
                 ? { sourceCodeAvailable: true }
                 : {}),
-              ...(purchaseDetails.purchaseType === 'template' && getTemplateSourceCodeUrl(product)
+              ...(purchaseDetails.purchaseType === 'template' && hasTemplateSourceCode(product)
                 ? { templateSourceCodeAvailable: true }
                 : {}),
               ...((purchaseDetails.purchaseType === 'template' ? getTemplateSourceCodeUrl(product) : product.sourceCodeUrl)
@@ -861,9 +866,9 @@ export const verifyPaystackPayment = async (req, res) => {
               ...(purchaseDetails.purchaseType === 'use'
                 ? { accessUrl: product.productType === 'app' ? product.apkUrl : product.productType === 'ios_app' ? product.iosAppUrl : product.websiteUrl }
                 : {}),
-              documents: product.documents.map(({ name, mimeType }) => ({ name, mimeType })),
+              documents: (product.documents || []).map(({ name, mimeType }) => ({ name, mimeType })),
               ...(purchaseDetails.purchaseType === 'template'
-                ? { templateDocuments: (product.templateDocuments || []).map(({ name, mimeType }) => ({ name, mimeType })) }
+                ? { templateSourceCodeParts: (product.templateSourceCodeParts || []).map(({ name, mimeType }) => ({ name, mimeType })) }
                 : {}),
             },
           };
@@ -876,13 +881,13 @@ export const verifyPaystackPayment = async (req, res) => {
             isActive: true,
             moderationStatus: { $ne: 'suspended' },
             isSold: false,
-          }).select('_id name productType owner price usePrice templatePrice websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl sourceArchiveVersion documents templateDocuments screenshots').session(session);
-          const purchaseSourceCodeUrl = purchaseType === 'template'
-            ? getTemplateSourceCodeUrl(product || {})
-            : product?.sourceCodeUrl;
+          }).select('_id name productType owner price usePrice templatePrice websiteUrl apkUrl iosAppUrl sourceCodeUrl templateSourceCodeUrl templateSourceCodeParts sourceArchiveVersion documents templateDocuments screenshots').session(session);
+          const purchaseSourceCodeReady = purchaseType === 'template'
+            ? hasTemplateSourceCode(product || {})
+            : isProductArchiveUrl(product?.sourceCodeUrl);
           if (!product || String(product.owner) === String(currentPayment.user)
             || !['use', 'template'].includes(purchaseType)
-            || !isProductArchiveUrl(purchaseSourceCodeUrl)
+            || !purchaseSourceCodeReady
             || Math.round((Number(purchaseDetails?.sellerShare) + Number(purchaseDetails?.companyShare)) * 100) !== currentPayment.amount * 100) {
             const transactionError = new Error('The seller digital listing is unavailable; contact support with this payment reference.');
             transactionError.statusCode = 409;
@@ -1013,39 +1018,43 @@ export const downloadPurchasedDigitalProductFile = async (req, res) => {
   const { productId, fileType, documentIndex } = req.params;
   const reference = req.body?.reference || req.get?.('x-payment-reference');
   if (!mongoose.isValidObjectId(productId)
-    || !['rental-source-code', 'template-source-code', 'document', 'template-document'].includes(fileType)
+    || !['rental-source-code', 'template-source-code', 'template-source-code-part', 'document', 'template-document'].includes(fileType)
     || typeof reference !== 'string' || !reference.trim()) {
     return res.status(400).json({ success: false, message: 'Invalid digital product file request.' });
   }
-  if (['document', 'template-document'].includes(fileType) && !/^(0|[1-9]\d*)$/.test(documentIndex || '')) {
+  if (['document', 'template-document', 'template-source-code-part'].includes(fileType)
+    && !/^(0|[1-9]\d*)$/.test(documentIndex || '')) {
     return res.status(400).json({ success: false, message: 'Invalid buyer document selection.' });
   }
 
   try {
-    const sellerPurchaseType = fileType === 'rental-source-code' || fileType === 'document'
-      ? 'use'
-      : 'template';
     const purchaseTypes = fileType === 'rental-source-code'
       ? [
         { purpose: 'digital_product', 'metadata.purchaseType': 'use' },
         { purpose: 'seller_digital_asset', 'metadata.purchaseType': 'use' },
         { purpose: 'seller_digital_asset', 'metadata.purchaseType': { $exists: false } },
       ]
-      : fileType === 'template-source-code'
+      : fileType === 'document'
+        ? [
+          { purpose: 'digital_product', 'metadata.purchaseType': { $in: ['use', 'template'] } },
+          { purpose: 'seller_digital_asset', 'metadata.purchaseType': { $in: ['use', 'template'] } },
+          { purpose: 'seller_digital_asset', 'metadata.purchaseType': { $exists: false } },
+        ]
+      : ['template-source-code', 'template-source-code-part'].includes(fileType)
         ? [
           { purpose: 'digital_product', 'metadata.purchaseType': 'template' },
           { purpose: 'seller_digital_asset', 'metadata.purchaseType': 'template' },
           { purpose: 'seller_digital_asset', 'metadata.purchaseType': { $exists: false } },
         ]
         : fileType === 'template-document'
-          ? [
-            { purpose: 'digital_product', 'metadata.purchaseType': 'template' },
-            { purpose: 'seller_digital_asset', 'metadata.purchaseType': 'template' },
-          ]
+            ? [
+              { purpose: 'digital_product', 'metadata.purchaseType': 'template' },
+              { purpose: 'seller_digital_asset', 'metadata.purchaseType': 'template' },
+            ]
           : [
             { purpose: 'digital_product', 'metadata.purchaseType': { $in: ['use', 'template'] } },
-            { purpose: 'seller_digital_asset', 'metadata.purchaseType': sellerPurchaseType },
-            ...(sellerPurchaseType === 'use' ? [{ purpose: 'seller_digital_asset', 'metadata.purchaseType': { $exists: false } }] : []),
+            { purpose: 'seller_digital_asset', 'metadata.purchaseType': 'use' },
+            { purpose: 'seller_digital_asset', 'metadata.purchaseType': { $exists: false } },
           ];
     const payment = await Payment.findOne({
       reference: reference.trim(),
@@ -1059,7 +1068,7 @@ export const downloadPurchasedDigitalProductFile = async (req, res) => {
     }
 
     const product = await StoreProduct.findById(productId)
-      .select('name sourceCodeUrl sourceCodeCloudinaryUrl templateSourceCodeUrl templateSourceCodeCloudinaryUrl sourceArchiveVersion documents templateDocuments')
+      .select('name sourceCodeUrl sourceCodeCloudinaryUrl templateSourceCodeUrl templateSourceCodeCloudinaryUrl templateSourceCodeParts sourceArchiveVersion documents templateDocuments')
       .lean();
     if (!product) {
       return res.status(404).json({ success: false, message: 'This digital product is unavailable.' });
@@ -1070,11 +1079,20 @@ export const downloadPurchasedDigitalProductFile = async (req, res) => {
       : fileType === 'template-document'
         ? product.templateDocuments?.[Number(documentIndex)]
         : null;
+    const templateSourceCodePart = fileType === 'template-source-code-part'
+      ? product.templateSourceCodeParts?.[Number(documentIndex)]
+      : null;
+    if ((['document', 'template-document'].includes(fileType) && !document)
+      || (fileType === 'template-source-code-part' && !templateSourceCodePart)) {
+      return res.status(404).json({ success: false, message: 'The purchased file is unavailable.' });
+    }
     const fileUrl = fileType === 'rental-source-code'
       ? product.sourceCodeUrl
       : fileType === 'template-source-code'
         ? getTemplateSourceCodeUrl(product)
-        : document?.url;
+        : fileType === 'template-source-code-part'
+          ? templateSourceCodePart.url
+          : document?.url;
     const r2Key = getR2ObjectKey(fileUrl);
     const cloudinaryFallbackUrl = r2Key
       ? fileType === 'rental-source-code'
@@ -1082,6 +1100,8 @@ export const downloadPurchasedDigitalProductFile = async (req, res) => {
         : fileType === 'template-source-code'
           ? product.templateSourceCodeCloudinaryUrl
             || (Number(product.sourceArchiveVersion || 1) < 2 ? product.sourceCodeCloudinaryUrl : '')
+          : fileType === 'template-source-code-part'
+            ? templateSourceCodePart.cloudinaryUrl
           : document?.cloudinaryUrl
       : fileUrl;
     const cloudinaryUrl = getCloudinaryRawAssetUrl(cloudinaryFallbackUrl);
@@ -1089,7 +1109,9 @@ export const downloadPurchasedDigitalProductFile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'The purchased file is unavailable.' });
     }
 
-    const filename = !['document', 'template-document'].includes(fileType)
+    const filename = fileType === 'template-source-code-part'
+      ? templateSourceCodePart.name
+      : !['document', 'template-document'].includes(fileType)
       ? `${product.name}-${fileType === 'rental-source-code' ? 'rental' : 'template'}-source-code.zip`
       : document.name;
     let downloadStream;

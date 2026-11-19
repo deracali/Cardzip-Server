@@ -342,6 +342,7 @@ const sanitizePublicDigitalAsset = (product) => {
   delete publicProduct.sourceCodeCloudinaryUrl;
   delete publicProduct.templateSourceCodeUrl;
   delete publicProduct.templateSourceCodeCloudinaryUrl;
+  delete publicProduct.templateSourceCodeParts;
   delete publicProduct.moderationStatus;
   delete publicProduct.moderationReason;
   publicProduct.isPromoted = Boolean(
@@ -398,7 +399,7 @@ export const createSellerDigitalAsset = async (req, res) => {
   const {
     name, productType, category, description, price, usePrice, templatePrice, websiteUrl, apkUrl, iosAppUrl,
     sellerContact, screenshots, sourceCodeUrl, sourceCodeCloudinaryUrl, templateSourceCodeUrl,
-    templateSourceCodeCloudinaryUrl, documents, templateDocuments,
+    templateSourceCodeCloudinaryUrl, documents, templateSourceCodeParts,
   } = req.body || {};
   const normalizedName = typeof name === 'string' ? name.trim() : '';
   const normalizedType = DIGITAL_ASSET_TYPES.includes(productType) ? productType : '';
@@ -411,7 +412,12 @@ export const createSellerDigitalAsset = async (req, res) => {
     ? [...new Set(screenshots.map((value) => typeof value === 'string' ? value.trim() : ''))]
     : [];
   const normalizedDocuments = normalizeStoreProductDocuments(documents ?? []);
-  const normalizedTemplateDocuments = normalizeStoreProductDocuments(templateDocuments ?? []);
+  const normalizedTemplateSourceCodeParts = normalizeStoreProductDocuments(templateSourceCodeParts ?? []);
+  const invalidTemplateSourceCodePart = normalizedTemplateSourceCodeParts.value?.some((part) => (
+    !/\.zip$/i.test(part.name)
+    || !isUploadedStoreProductSourceCodeUrl(part.url)
+    || !['application/zip', 'application/x-zip-compressed', 'application/octet-stream'].includes(part.mimeType)
+  ));
 
   if (!normalizedName || normalizedName.length > 160) {
     return res.status(400).json({ success: false, message: 'Enter a listing name between 1 and 160 characters.' });
@@ -438,17 +444,21 @@ export const createSellerDigitalAsset = async (req, res) => {
   if (normalizedUsePrice > 0 && !isUploadedStoreProductSourceCodeUrl(sourceCodeUrl)) {
     return res.status(400).json({ success: false, message: 'Upload the rental source-code ZIP for the use option.' });
   }
-  if (normalizedTemplatePrice > 0 && !isUploadedStoreProductSourceCodeUrl(templateSourceCodeUrl)) {
-    return res.status(400).json({ success: false, message: 'Upload the full-template source-code ZIP for the template option.' });
+  if (normalizedTemplatePrice > 0
+    && !isUploadedStoreProductSourceCodeUrl(templateSourceCodeUrl)
+    && !normalizedTemplateSourceCodeParts.value?.length) {
+    return res.status(400).json({ success: false, message: 'Upload a full-template source-code ZIP or ZIP part for the template option.' });
   }
   if ((sourceCodeCloudinaryUrl && !isUploadedSourceCodeUrl(sourceCodeCloudinaryUrl))
     || (templateSourceCodeCloudinaryUrl && !isUploadedSourceCodeUrl(templateSourceCodeCloudinaryUrl))) {
     return res.status(400).json({ success: false, message: 'Source-code backups must be uploaded Cloudinary ZIP files.' });
   }
-  if (normalizedDocuments.error || normalizedTemplateDocuments.error) {
+  if (normalizedDocuments.error || normalizedTemplateSourceCodeParts.error || invalidTemplateSourceCodePart) {
     return res.status(400).json({
       success: false,
-      message: normalizedDocuments.error || `Full-template legal documents: ${normalizedTemplateDocuments.error}`,
+      message: normalizedDocuments.error
+        || normalizedTemplateSourceCodeParts.error
+        || 'Each full-template ZIP part must be a valid ZIP file.',
     });
   }
   if (normalizedScreenshots.length < 10 || normalizedScreenshots.length > 20
@@ -488,9 +498,10 @@ export const createSellerDigitalAsset = async (req, res) => {
       sourceCodeCloudinaryUrl: typeof sourceCodeCloudinaryUrl === 'string' ? sourceCodeCloudinaryUrl.trim() : '',
       templateSourceCodeUrl: typeof templateSourceCodeUrl === 'string' ? templateSourceCodeUrl.trim() : '',
       templateSourceCodeCloudinaryUrl: typeof templateSourceCodeCloudinaryUrl === 'string' ? templateSourceCodeCloudinaryUrl.trim() : '',
+      templateSourceCodeParts: normalizedTemplateSourceCodeParts.value,
       sourceArchiveVersion: 2,
       documents: normalizedDocuments.value,
-      templateDocuments: normalizedTemplateDocuments.value,
+      templateDocuments: [],
       screenshots: normalizedScreenshots,
       image: normalizedScreenshots[0],
       images: [],
@@ -713,7 +724,9 @@ export const reviewDigitalAsset = async (req, res) => {
     if (decision === 'approved'
       && (usesTierPricing
         ? (Number(product.usePrice) > 0 && !isUploadedStoreProductSourceCodeUrl(product.sourceCodeUrl))
-          || (Number(product.templatePrice) > 0 && !isUploadedStoreProductSourceCodeUrl(product.templateSourceCodeUrl))
+          || (Number(product.templatePrice) > 0
+            && !isUploadedStoreProductSourceCodeUrl(product.templateSourceCodeUrl)
+            && !(product.templateSourceCodeParts || []).some((part) => isUploadedStoreProductSourceCodeUrl(part.url)))
         : !isUploadedStoreProductSourceCodeUrl(product.sourceCodeUrl))) {
       return res.status(409).json({ success: false, message: 'Upload the source-code ZIP for every paid listing option before approving it.' });
     }
@@ -993,7 +1006,7 @@ export const createStoreProduct = async (req, res) => {
     name, productType, category, description, expectedDelivery, keyHighlights, specifications, packagingDetails,
     price, compareAtPrice, discountPercent, websiteUrl, apkUrl, iosAppUrl, usageInstructions, usePrice, templatePrice,
     sourceCodeUrl, sourceCodeCloudinaryUrl, templateSourceCodeUrl, templateSourceCodeCloudinaryUrl,
-    documents, templateDocuments, condition, isSold, image, images, colors, stock, tags, isActive,
+    documents, templateDocuments, templateSourceCodeParts, condition, isSold, image, images, colors, stock, tags, isActive,
   } = req.body;
   const normalizedType = STORE_PRODUCT_TYPES.includes(productType) ? productType : 'product';
   const normalizedName = typeof name === 'string' ? name.trim() : '';
@@ -1011,6 +1024,7 @@ export const createStoreProduct = async (req, res) => {
   const normalizedColors = normalizeStoreProductColors(colors ?? []);
   const normalizedDocuments = normalizeStoreProductDocuments(documents ?? []);
   const normalizedTemplateDocuments = normalizeStoreProductDocuments(templateDocuments ?? []);
+  const normalizedTemplateSourceCodeParts = normalizeStoreProductDocuments(templateSourceCodeParts ?? []);
   if (normalizedHighlights.error) {
     return res.status(400).json({ success: false, message: normalizedHighlights.error });
   }
@@ -1025,6 +1039,9 @@ export const createStoreProduct = async (req, res) => {
   }
   if (normalizedTemplateDocuments.error) {
     return res.status(400).json({ success: false, message: `Full-template legal documents: ${normalizedTemplateDocuments.error}` });
+  }
+  if (normalizedTemplateSourceCodeParts.error) {
+    return res.status(400).json({ success: false, message: `Full-template ZIP parts: ${normalizedTemplateSourceCodeParts.error}` });
   }
   if (packagingDetails !== undefined && (typeof packagingDetails !== 'string' || packagingDetails.length > 5000)) {
     return res.status(400).json({ success: false, message: 'Packaging details must be text of 5000 characters or fewer.' });
@@ -1128,6 +1145,7 @@ export const createStoreProduct = async (req, res) => {
       sourceArchiveVersion: 2,
       documents: normalizedDocuments.value,
       templateDocuments: normalizedType === 'product' ? [] : normalizedTemplateDocuments.value,
+      templateSourceCodeParts: normalizedType === 'product' ? [] : normalizedTemplateSourceCodeParts.value,
       usageInstructions: normalizedType === 'product' ? '' : usageInstructions.trim(),
       usePrice: normalizedType === 'product' ? 0 : Number(usePrice || 0),
       templatePrice: normalizedType === 'product' ? 0 : Number(templatePrice || 0),
@@ -1202,7 +1220,7 @@ export const updateStoreProduct = async (req, res) => {
     name, productType, category, description, expectedDelivery, keyHighlights, specifications, packagingDetails,
     price, compareAtPrice, discountPercent, websiteUrl, apkUrl, iosAppUrl, usageInstructions, usePrice, templatePrice,
     sourceCodeUrl, sourceCodeCloudinaryUrl, templateSourceCodeUrl, templateSourceCodeCloudinaryUrl,
-    documents, templateDocuments, condition, isSold, image, images, colors, stock, tags, isActive,
+    documents, templateDocuments, templateSourceCodeParts, condition, isSold, image, images, colors, stock, tags, isActive,
   } = req.body;
   if (productType !== undefined) {
     if (!STORE_PRODUCT_TYPES.includes(productType)) {
@@ -1290,6 +1308,7 @@ export const updateStoreProduct = async (req, res) => {
     updates.templateSourceCodeUrl = '';
     updates.templateSourceCodeCloudinaryUrl = '';
     updates.templateDocuments = [];
+    updates.templateSourceCodeParts = [];
     updates.sourceArchiveVersion = 2;
     updates.usageInstructions = '';
     updates.usePrice = 0;
@@ -1411,6 +1430,13 @@ export const updateStoreProduct = async (req, res) => {
       return res.status(400).json({ success: false, message: `Full-template legal documents: ${normalized.error}` });
     }
     updates.templateDocuments = normalized.value;
+  }
+  if (templateSourceCodeParts !== undefined && digitalType !== 'product') {
+    const normalized = normalizeStoreProductDocuments(templateSourceCodeParts);
+    if (normalized.error) {
+      return res.status(400).json({ success: false, message: `Full-template ZIP parts: ${normalized.error}` });
+    }
+    updates.templateSourceCodeParts = normalized.value;
   }
   if (stock !== undefined) {
     const parsedStock = Number(stock);

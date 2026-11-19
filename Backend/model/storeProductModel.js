@@ -29,6 +29,13 @@ const productSchema = new mongoose.Schema({
   sourceCodeCloudinaryUrl: { type: String, default: '', trim: true },
   templateSourceCodeUrl: { type: String, default: '', trim: true },
   templateSourceCodeCloudinaryUrl: { type: String, default: '', trim: true },
+  templateSourceCodeParts: [{
+    name: { type: String, required: true, trim: true, maxlength: 180 },
+    url: { type: String, required: true, trim: true },
+    cloudinaryUrl: { type: String, default: '', trim: true },
+    mimeType: { type: String, required: true, trim: true },
+    _id: false,
+  }],
   sourceArchiveVersion: { type: Number, default: 1 },
   documents: [{
     name: { type: String, required: true, trim: true, maxlength: 180 },

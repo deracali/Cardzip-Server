@@ -370,7 +370,7 @@ test('keeps Cloudinary uploads available when the R2 mirror fails', async () => 
   assert.equal(response.payload.data.sourceCodeCloudinaryUrl, response.payload.data.sourceCodeUrl);
 });
 
-test('creates full-stack seller listings with separate rental/template assets and files', async () => {
+test('creates full-stack seller listings with separate rental/template ZIPs and buyer files', async () => {
   StoreProduct.exists = async () => null;
   StoreProduct.create = async (product) => product;
   const response = new CapturedResponse();
@@ -389,16 +389,16 @@ test('creates full-stack seller listings with separate rental/template assets an
       sourceCodeCloudinaryUrl: 'https://res.cloudinary.com/test/raw/upload/v1/rental.zip',
       templateSourceCodeUrl: 'r2://cardzip/product-files/223e4567-e89b-12d3-a456-426614174000.zip',
       templateSourceCodeCloudinaryUrl: 'https://res.cloudinary.com/test/raw/upload/v1/template.zip',
+      templateSourceCodeParts: [{
+        name: 'template-part.zip',
+        url: 'r2://cardzip/product-files/423e4567-e89b-12d3-a456-426614174000.zip',
+        cloudinaryUrl: 'https://res.cloudinary.com/test/raw/upload/v1/template-part.zip',
+        mimeType: 'application/zip',
+      }],
       documents: [{
         name: 'buyer-guide.pdf',
         url: 'r2://cardzip/product-files/323e4567-e89b-12d3-a456-426614174000.pdf',
         cloudinaryUrl: 'https://res.cloudinary.com/test/raw/upload/v1/buyer-guide.pdf',
-        mimeType: 'application/pdf',
-      }],
-      templateDocuments: [{
-        name: 'license.pdf',
-        url: 'r2://cardzip/product-files/423e4567-e89b-12d3-a456-426614174000.pdf',
-        cloudinaryUrl: 'https://res.cloudinary.com/test/raw/upload/v1/license.pdf',
         mimeType: 'application/pdf',
       }],
       screenshots: Array.from({ length: 10 }, (_, index) => `https://example.com/screenshot-${index}.jpg`),
@@ -411,7 +411,8 @@ test('creates full-stack seller listings with separate rental/template assets an
   assert.equal(response.payload.data.templatePrice, 1200);
   assert.equal(response.payload.data.price, 300);
   assert.equal(response.payload.data.sourceCodeUrl, 'r2://cardzip/product-files/123e4567-e89b-12d3-a456-426614174000.zip');
-  assert.equal(response.payload.data.templateDocuments[0].name, 'license.pdf');
+  assert.equal(response.payload.data.templateSourceCodeParts[0].name, 'template-part.zip');
+  assert.deepEqual(response.payload.data.templateDocuments, []);
 });
 
 test('uploads seller source archives through Cloudinary-first storage', async () => {
@@ -506,6 +507,60 @@ test('authorizes seller rental and template downloads against their purchased op
   assert.equal(Buffer.concat(response.chunks).toString(), 'TEMPLATE ZIP');
   assert.ok(paymentQueries.at(-1).$or.some((query) => query.purpose === 'seller_digital_asset'
     && query['metadata.purchaseType'] === 'template'));
+});
+
+test('downloads individual full-template ZIP parts only with a template purchase', async () => {
+  process.env.R2_ACCOUNT_ID = 'test-account';
+  process.env.R2_ACCESS_KEY_ID = 'test-access-key';
+  process.env.R2_SECRET_ACCESS_KEY = 'test-secret-key';
+  process.env.R2_BUCKET_NAME = 'private-products';
+  const key = 'cardzip/product-files/323e4567-e89b-12d3-a456-426614174000.zip';
+  StoreProduct.findById = () => ({
+    select() { return this; },
+    lean: async () => ({
+      name: 'Test Asset',
+      sourceCodeUrl: '',
+      templateSourceCodeUrl: '',
+      sourceArchiveVersion: 2,
+      templateSourceCodeParts: [{
+        name: 'part-two.zip',
+        url: `r2://${key}`,
+        cloudinaryUrl: 'https://res.cloudinary.com/test/raw/upload/v1/part-two.zip',
+      }],
+      documents: [],
+      templateDocuments: [],
+    }),
+  });
+  let objectRequested = false;
+  S3Client.prototype.send = async () => {
+    objectRequested = true;
+    return {
+      Body: Readable.from([Buffer.from('TEMPLATE ZIP PART')]),
+      ContentLength: 17,
+    };
+  };
+
+  const denied = await makeRequest('paid-reference', 'template-source-code-part', '0');
+  assert.equal(denied.statusCode, 403);
+  assert.equal(objectRequested, false);
+
+  paidPurchaseType = 'template';
+  const response = await makeRequest('paid-reference', 'template-source-code-part', '0');
+  assert.equal(response.statusCode, 200);
+  assert.equal(Buffer.concat(response.chunks).toString(), 'TEMPLATE ZIP PART');
+  assert.equal(response.headers['content-disposition'], 'part-two.zip');
+});
+
+test('allows seller template purchases to download buyer guide files', async () => {
+  paidPurchaseType = 'template';
+  upstreamResponse = async () => new Response('Buyer guide', { status: 200 });
+
+  const response = await makeRequest('paid-reference', 'document', '0');
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(Buffer.concat(response.chunks).toString(), 'Buyer guide');
+  assert.ok(paymentQueries.at(-1).$or.some((query) => query.purpose === 'seller_digital_asset'
+    && query['metadata.purchaseType']?.$in?.includes('template')));
 });
 
 test('streams private R2 product files only after payment authorization', async () => {

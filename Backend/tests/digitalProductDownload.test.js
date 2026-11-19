@@ -301,6 +301,40 @@ test('uploads product files to Cloudinary first and mirrors them to R2', async (
   assert.deepEqual(uploadOrder, ['cloudinary', 'r2', 'cloudinary', 'r2']);
 });
 
+test('uploads full-template ZIPs over 100 MB directly to R2', async () => {
+  process.env.R2_ACCOUNT_ID = 'test-account';
+  process.env.R2_ACCESS_KEY_ID = 'test-access-key';
+  process.env.R2_SECRET_ACCESS_KEY = 'test-secret-key';
+  process.env.R2_BUCKET_NAME = 'private-products';
+  let cloudinaryCalled = false;
+  let uploadedCommand;
+  cloudinary.uploader.upload = async () => {
+    cloudinaryCalled = true;
+    throw new Error('Cloudinary should not receive large archives');
+  };
+  S3Client.prototype.send = async (command) => {
+    uploadedCommand = command;
+    return {};
+  };
+  const response = new CapturedResponse();
+  await uploadStoreProductSourceCode({
+    files: {
+      sourceCode: {
+        name: 'full-template.zip',
+        mimetype: 'application/zip',
+        size: 101 * 1024 * 1024,
+        data: Buffer.from('ZIP'),
+      },
+    },
+  }, response);
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(cloudinaryCalled, false);
+  assert.match(response.payload.data.sourceCodeUrl, /^r2:\/\/cardzip\/product-files\/.+\.zip$/i);
+  assert.equal(response.payload.data.sourceCodeCloudinaryUrl, '');
+  assert.equal(uploadedCommand.input.ContentLength, 101 * 1024 * 1024);
+});
+
 test('keeps Cloudinary uploads available when the R2 mirror fails', async () => {
   cloudinary.uploader.upload = async () => ({
     secure_url: 'https://res.cloudinary.com/test/raw/upload/v1/project.zip',

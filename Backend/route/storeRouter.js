@@ -14,6 +14,7 @@ import {
   listAdminDigitalAssets,
   getStoreProductBySlug,
   getStoreProducts,
+  MAX_STORE_PRODUCT_SOURCE_CODE_SIZE,
   updateAdminStoreOrder,
   updateStoreProduct,
   uploadStoreProductImage,
@@ -157,7 +158,7 @@ storeRouter.post('/admin/products/documents', authenticateAdmin, requireAdminPer
 }), uploadStoreProductDocument);
 storeRouter.post('/admin/products/source-code', authenticateAdmin, requireAdminPermission(['Store Products', 'E-Commerce']), fileUpload({
   useTempFiles: true,
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: MAX_STORE_PRODUCT_SOURCE_CODE_SIZE },
   abortOnLimit: true,
 }), uploadStoreProductSourceCode);
 storeRouter.post('/admin/products', authenticateAdmin, requireAdminPermission(['Store Products', 'E-Commerce']), createStoreProduct);

@@ -13,6 +13,8 @@ import { GoogleGenAI } from '@google/genai';
 import { getR2ObjectKey, isR2StorageConfigured, uploadProductFileToR2 } from '../utils/r2Storage.js';
 
 const SHIPPING_FEE = 1500;
+export const MAX_STORE_PRODUCT_SOURCE_CODE_SIZE = 500 * 1024 * 1024;
+const MAX_CLOUDINARY_PRODUCT_FILE_SIZE = 100 * 1024 * 1024;
 const LEGACY_DEMO_PRODUCT_SLUGS = [
   'wireless-developer-headset',
   'aluminium-laptop-stand',
@@ -255,6 +257,18 @@ const uploadProductFileToCloudinary = async (file, folder, extension) => {
   return uploaded.secure_url;
 };
 const uploadProductFileToPreferredStorage = async (file, folder, extension) => {
+  if (file.size > MAX_CLOUDINARY_PRODUCT_FILE_SIZE) {
+    if (!isR2StorageConfigured()) {
+      const error = new Error('R2 storage must be configured for product files over 100 MB.');
+      error.code = 'R2_STORAGE_NOT_CONFIGURED';
+      throw error;
+    }
+    return {
+      url: await uploadProductFileToR2(file, extension),
+      cloudinaryUrl: '',
+    };
+  }
+
   let cloudinaryUrl = '';
   let cloudinaryError;
   try {
@@ -594,8 +608,8 @@ export const uploadStoreProductSourceCode = async (req, res) => {
   if (!/\.zip$/i.test(sourceCode.name) || !['application/zip', 'application/x-zip-compressed', 'application/octet-stream'].includes(sourceCode.mimetype)) {
     return res.status(400).json({ success: false, message: 'Source code must be provided as a ZIP archive.' });
   }
-  if (sourceCode.size > 100 * 1024 * 1024) {
-    return res.status(413).json({ success: false, message: 'Source-code archives must be 100 MB or smaller.' });
+  if (sourceCode.size > MAX_STORE_PRODUCT_SOURCE_CODE_SIZE) {
+    return res.status(413).json({ success: false, message: 'Full-template source-code archives must be 500 MB or smaller.' });
   }
 
   try {

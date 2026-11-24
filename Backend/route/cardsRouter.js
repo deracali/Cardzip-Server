@@ -12,7 +12,7 @@ import {
 const cardRoutes = express.Router();
 cardRoutes.get('/get', getGiftCards);
 cardRoutes.get('/get/:id', getGiftCardById);
-cardRoutes.post('/bulk', authenticateAdmin, requireAdminPermission('Gift Cards'), bulkUpsertGiftCards);
+cardRoutes.post('/bulk', authenticateAdmin, bulkUpsertGiftCards);
 cardRoutes.post('/create', authenticateAdmin, requireAdminPermission('Gift Cards'), createGiftCard);
 cardRoutes.patch('/update/:id', authenticateAdmin, requireAdminPermission('Gift Cards'), updateGiftCard);
 cardRoutes.delete('/delete/:id', authenticateAdmin, requireAdminPermission('Gift Cards'), deleteGiftCard);

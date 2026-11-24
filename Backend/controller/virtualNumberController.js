@@ -4,6 +4,7 @@ import User from '../model/userModel.js';
 import WalletTransaction from '../model/walletTransactionModel.js';
 import mongoose from 'mongoose';
 import { createPaginationMetadata, parsePagination } from '../utils/pagination.js';
+import { matchesVirtualNumberPriceQuote } from '../utils/virtualNumberPricing.js';
 
 const getPaystackSecret = () => process.env.PAYSTACK_SECRET_KEY?.trim();
 const newReference = () => `VN-${randomUUID().replace(/-/g, '').toUpperCase()}`;
@@ -59,12 +60,18 @@ const normalizePurchase = (body) => {
   const area = String(body.area || '').trim().slice(0, 80);
   const duration = String(body.duration || '').trim().slice(0, 80);
   const time = Number(body.time);
+  const priceNgn = Number(body.priceNgn);
   if (!appName || !Number.isSafeInteger(time) || time < 1 || time > 12) {
     const error = new Error('Select an app and rental duration between 1 and 12 months.');
     error.statusCode = 400;
     throw error;
   }
-  return { appName, area, duration, time, autoRenew: Boolean(body.auto_renew) };
+  if (!Number.isFinite(priceNgn) || priceNgn <= 0) {
+    const error = new Error('The rental price is unavailable. Refresh the price and try again.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return { appName, area, duration, time, autoRenew: Boolean(body.auto_renew), priceNgn };
 };
 
 const providerErrorMessage = (error) => {
@@ -117,7 +124,7 @@ export const createVirtualNumberHandlers = (fleexa) => ({
     let session;
     let providerFulfilled = false;
     try {
-      const purchase = normalizePurchase(req.body);
+      const { priceNgn, ...purchase } = normalizePurchase(req.body);
       const paymentMethod = req.body.paymentMethod;
       if (!['wallet', 'paystack'].includes(paymentMethod)) {
         const error = new Error('Choose wallet or Paystack as the payment method.');
@@ -133,7 +140,13 @@ export const createVirtualNumberHandlers = (fleexa) => ({
         status: 'pending',
         paymentStatus: 'pending',
       });
-      const amount = await getNairaPrice(fleexa, purchase.appName, purchase.duration);
+      const providerPrice = await getNairaPrice(fleexa, purchase.appName, purchase.duration);
+      if (!matchesVirtualNumberPriceQuote(providerPrice, priceNgn)) {
+        const error = new Error('The rental price changed. Refresh the price and try again.');
+        error.statusCode = 409;
+        throw error;
+      }
+      const amount = priceNgn;
       transaction.amount = amount;
       await transaction.save();
 

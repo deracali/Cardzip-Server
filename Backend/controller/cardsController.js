@@ -33,6 +33,70 @@ export const createGiftCard = async (req, res) => {
   }
 };
 
+export const bulkUpsertGiftCards = async (req, res) => {
+  const cards = req.body;
+  if (!Array.isArray(cards) || cards.length === 0 || cards.length > 100) {
+    return res.status(400).json({ success: false, error: 'Provide an array containing 1 to 100 gift cards.' });
+  }
+
+  const normalizedCards = [];
+  const names = new Set();
+  for (const [index, card] of cards.entries()) {
+    if (!card || typeof card !== 'object' || Array.isArray(card)) {
+      return res.status(400).json({ success: false, error: `Gift card at index ${index} must be an object.` });
+    }
+
+    const document = new GiftCard(card);
+    try {
+      await document.validate();
+    } catch (validationError) {
+      const details = Object.values(validationError.errors || {}).map(({ path, message }) => ({ field: path, message }));
+      return res.status(400).json({
+        success: false,
+        error: `Gift card at index ${index} failed validation.`,
+        details,
+      });
+    }
+
+    const normalized = document.toObject({ versionKey: false });
+    const nameKey = normalized.name.trim().toLowerCase();
+    if (names.has(nameKey)) {
+      return res.status(400).json({ success: false, error: `Duplicate gift card name in request: ${normalized.name}.` });
+    }
+    names.add(nameKey);
+    delete normalized._id;
+    delete normalized.createdAt;
+    delete normalized.updatedAt;
+    normalizedCards.push(normalized);
+  }
+
+  try {
+    const result = await GiftCard.bulkWrite(normalizedCards.map((card) => {
+      const escapedName = card.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return {
+        updateOne: {
+          filter: { name: { $regex: `^${escapedName}$`, $options: 'i' } },
+          update: { $set: card },
+          upsert: true,
+        },
+      };
+    }), { ordered: true });
+
+    return res.json({
+      success: true,
+      data: {
+        receivedCount: normalizedCards.length,
+        createdCount: result.upsertedCount,
+        updatedCount: result.modifiedCount,
+        unchangedCount: result.matchedCount - result.modifiedCount,
+      },
+    });
+  } catch (error) {
+    console.error('Bulk gift card import error:', error);
+    return res.status(500).json({ success: false, error: 'Could not import gift cards.' });
+  }
+};
+
 // Get all gift cards
 export const getGiftCards = async (req, res) => {
   try {

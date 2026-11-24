@@ -39,6 +39,7 @@ import reportRouter from './route/reportRouter.js';
 import whatsAppRouter from './route/whatsAppRouter.js';
 import telegramRouter from './route/telegramRouter.js';
 import { initializeGiftCardRealtime } from './utils/giftCardRealtime.js';
+import { createSms4AppPage } from './utils/sms4AppCatalog.js';
 import requireFeatureEnabled from './middleware/requireFeatureEnabled.js';
 
 const mongoDnsServers = process.env.MONGODB_DNS_SERVERS
@@ -485,6 +486,24 @@ const fleexa = axios.create({
   },
 });
 
+const SMS4_APPS_CACHE_TTL_MS = 60 * 1000;
+let sms4AppsCache = null;
+let sms4AppsCacheExpiresAt = 0;
+let sms4AppsRequest = null;
+const getSms4Apps = async () => {
+  if (sms4AppsCache && Date.now() < sms4AppsCacheExpiresAt) return sms4AppsCache;
+  if (!sms4AppsRequest) {
+    sms4AppsRequest = fleexa.get('/rent/sms4/apps')
+      .then(({ data }) => {
+        sms4AppsCache = data;
+        sms4AppsCacheExpiresAt = Date.now() + SMS4_APPS_CACHE_TTL_MS;
+        return data;
+      })
+      .finally(() => { sms4AppsRequest = null; });
+  }
+  return sms4AppsRequest;
+};
+
 const virtualNumberHandlers = createVirtualNumberHandlers(fleexa);
 app.post('/api/payments/paystack/webhook', createPaystackWebhookHandler(virtualNumberHandlers.verifyPaystack));
 
@@ -552,8 +571,9 @@ app.get('/api/rent/sms4/areas', requireFeatureEnabled('esimEnabled'), async (req
 // 2. Get Available Apps & Stock for Rental
 app.get('/api/rent/sms4/apps', requireFeatureEnabled('esimEnabled'), async (req, res) => {
   try {
-    const response = await fleexa.get('/rent/sms4/apps');
-    res.json(response.data);
+    const appCatalog = await getSms4Apps();
+    const isPaginated = req.query.search !== undefined || req.query.limit !== undefined || req.query.offset !== undefined;
+    res.json(isPaginated ? createSms4AppPage(appCatalog, req.query) : appCatalog);
   } catch (error) {
     handleApiError(error, res, 'Failed to fetch SMS 4 rental apps');
   }

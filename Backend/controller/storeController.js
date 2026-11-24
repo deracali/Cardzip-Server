@@ -356,9 +356,6 @@ const sanitizePublicDigitalAsset = (product) => {
     publicProduct.images = [];
     publicProduct.screenshots = [];
     publicProduct.sellerContact = '';
-    publicProduct.websiteUrl = '';
-    publicProduct.apkUrl = '';
-    publicProduct.iosAppUrl = '';
     delete publicProduct.owner;
     delete publicProduct.sellerListingStatus;
     delete publicProduct.sellerReviewNote;

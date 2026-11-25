@@ -20,6 +20,7 @@ import {
     listAdminWithdrawals,
     listStaff,
     listTasks,
+    reverseAdminWalletFunding,
     reviewWithdrawal,
     setWithdrawalPasskey,
     verifyWithdrawalPasskey,
@@ -54,6 +55,7 @@ adminRoute.put('/update/:id', updateAdmin);
 adminRoute.get('/overview', requireAdminPermission('Overview'), getAdminOverview);
 adminRoute.get('/wallet', requireAdminPermission('Admin Wallet'), getAdminWalletDashboard);
 adminRoute.get('/add-money', requireAdminPermission('Add Money'), getAdminWalletFunding);
+adminRoute.post('/add-money/:id/reverse', requireAdminPermission('Add Money'), requireAdministrator, reverseAdminWalletFunding);
 adminRoute.get('/virtual-numbers/transactions', requireAdminPermission('Virtual Numbers'), listAdminVirtualNumberTransactions);
 adminRoute.get('/treasury', requireAdminPermission('Treasury'), getAdminTreasury);
 adminRoute.get('/staff', requireAdminPermission('Staff'), listStaff);

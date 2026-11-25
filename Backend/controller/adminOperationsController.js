@@ -616,7 +616,7 @@ export const getAdminWalletFunding = async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query, 20, 100);
     const filter = { purpose: 'wallet_funding' };
-    if (['pending', 'completed', 'failed'].includes(req.query.status)) filter.status = req.query.status;
+    if (['pending', 'completed', 'failed', 'reversed'].includes(req.query.status)) filter.status = req.query.status;
 
     const search = String(req.query.search || '').trim().slice(0, 80);
     if (search) {
@@ -642,7 +642,8 @@ export const getAdminWalletFunding = async (req, res) => {
     const [payments, totalItems, todayPayments] = await Promise.all([
       Payment.find(filter)
         .populate('user', 'name email')
-        .select('user reference providerReference amount vatAmount currency status channel providerFee failureReason createdAt updatedAt')
+        .populate('reversedBy', 'name email')
+        .select('user reference providerReference amount vatAmount currency status channel providerFee failureReason reversedBy reversedAt createdAt updatedAt')
         .sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       Payment.countDocuments(filter),
       Payment.aggregate([
@@ -675,6 +676,118 @@ export const getAdminWalletFunding = async (req, res) => {
   } catch (error) {
     console.error('Get admin wallet funding history error:', error);
     return res.status(500).json({ success: false, message: 'Could not load Paystack wallet funding history.' });
+  }
+};
+
+export const reverseAdminWalletFunding = async (req, res) => {
+  const { reason } = req.body ?? {};
+  if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 300) {
+    return res.status(400).json({ success: false, message: 'Enter a reversal note between 1 and 300 characters.' });
+  }
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ success: false, message: 'Invalid wallet funding payment.' });
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      const payment = await Payment.findOne({
+        _id: req.params.id,
+        purpose: 'wallet_funding',
+        status: 'completed',
+      }).session(session);
+      if (!payment) {
+        const error = new Error('This wallet top-up is not successful or has already been reversed.');
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const creditedAmount = Number(payment.amount);
+      const walletCredit = await WalletTransaction.findOne({
+        user: payment.user,
+        type: 'credit',
+        amount: creditedAmount,
+        referenceType: 'paystack',
+        referenceId: payment.reference,
+        status: 'completed',
+      }).session(session);
+      if (!walletCredit) {
+        const error = new Error('The original Paystack wallet credit could not be verified; no balance was changed.');
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const user = await User.findById(payment.user).session(session);
+      if (!user) {
+        const error = new Error('The wallet owner account could not be found.');
+        error.statusCode = 404;
+        throw error;
+      }
+      const balanceBefore = Number(user.walletBalance || 0);
+      if (balanceBefore < creditedAmount) {
+        const error = new Error('The user has already spent some of this credit; the wallet balance is too low to reverse it.');
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const updatedUser = await User.findOneAndUpdate(
+        { _id: user._id, walletBalance: { $gte: creditedAmount } },
+        { $inc: { walletBalance: -creditedAmount } },
+        { new: true, session },
+      );
+      if (!updatedUser) {
+        const error = new Error('The wallet balance changed before the reversal could be applied. Refresh and try again.');
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const note = `Paystack test-mode payment did not go through. Wallet credit was removed by admin. ${reason.trim()}`;
+      const reversedPayment = await Payment.findOneAndUpdate(
+        { _id: payment._id, status: 'completed' },
+        { $set: { status: 'reversed', failureReason: note, reversedBy: req.admin._id, reversedAt: new Date() } },
+        { new: true, session },
+      );
+      if (!reversedPayment) {
+        const error = new Error('This wallet top-up has already been updated.');
+        error.statusCode = 409;
+        throw error;
+      }
+
+      await WalletTransaction.create([{
+        user: user._id,
+        type: 'debit',
+        amount: creditedAmount,
+        currency: payment.currency,
+        balanceBefore,
+        balanceAfter: Number(updatedUser.walletBalance || 0),
+        status: 'completed',
+        description: note,
+        referenceType: 'paystack_reversal',
+        referenceId: payment.reference,
+        channel: 'admin',
+      }], { session });
+
+      result = {
+        payment: reversedPayment,
+        walletBalance: Number(updatedUser.walletBalance || 0),
+        currency: updatedUser.walletCurrency || payment.currency,
+      };
+    });
+
+    return res.json({
+      success: true,
+      message: 'Wallet credit reversed and the Paystack payment marked as reversed.',
+      data: result,
+    });
+  } catch (error) {
+    console.error('Reverse admin wallet funding error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.statusCode ? error.message : 'Could not reverse this wallet top-up.',
+    });
+  } finally {
+    await session.endSession();
   }
 };
 

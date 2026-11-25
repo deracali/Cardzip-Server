@@ -10,12 +10,14 @@ const paymentSchema = new mongoose.Schema({
   order: { type: mongoose.Schema.Types.ObjectId, ref: 'StoreOrder', default: null },
   campaign: { type: mongoose.Schema.Types.ObjectId, ref: 'AdCampaign', default: null },
   metadata: { type: mongoose.Schema.Types.Mixed, default: null },
-  status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending', index: true },
+  status: { type: String, enum: ['pending', 'completed', 'failed', 'reversed'], default: 'pending', index: true },
   authorizationUrl: { type: String, default: '' },
   providerReference: { type: String, default: '' },
   channel: { type: String, default: '' },
   providerFee: { type: Number, default: 0, min: 0 },
   failureReason: { type: String, default: '' },
+  reversedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null },
+  reversedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 export default mongoose.model('Payment', paymentSchema);

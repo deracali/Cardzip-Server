@@ -22,6 +22,9 @@ export const authenticateAdmin = async (req, res, next) => {
     if (!admin || !admin.isActive) {
       return res.status(401).json({ success: false, message: 'Admin account is unavailable.' });
     }
+    if ((admin.authVersion ?? 0) > 0 && payload.authVersion !== admin.authVersion) {
+      return res.status(401).json({ success: false, message: 'Your admin session has expired. Sign in again.' });
+    }
 
     req.admin = admin;
     return next();
@@ -46,6 +49,11 @@ export const requireAdminPermission = (permission) => (req, res, next) => {
 export const requireAdministrator = (req, res, next) => {
   if (req.admin?.role === 'admin' || req.admin?.role === 'superadmin') return next();
   return res.status(403).json({ success: false, message: 'Only an administrator can perform this action.' });
+};
+
+export const requireSuperadmin = (req, res, next) => {
+  if (req.admin?.role === 'superadmin') return next();
+  return res.status(403).json({ success: false, message: 'Only a superadmin can manage administrator accounts.' });
 };
 
 export const requireWithdrawalPasskey = (req, res, next) => {

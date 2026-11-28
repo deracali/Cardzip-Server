@@ -23,6 +23,7 @@ const allowedPages = new Set([
   'Digital Submissions', 'Shop Verification', 'Marketplace Promotions', 'Banner Ads', 'Gift Cards',
   'Pending Gift Card Reviews', 'My Attendance', 'Staff', 'Profile', 'Settings',
 ]);
+const isValidAdminEmail = (email) => typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
 const serializeAdmin = (admin) => ({
   id: admin._id,
@@ -195,6 +196,86 @@ export const createStaff = async (req, res) => {
   } catch (error) {
     console.error('Create staff error:', error);
     return res.status(500).json({ success: false, message: 'Could not create the staff account.' });
+  }
+};
+
+export const createAdministrator = async (req, res) => {
+  try {
+    const { name, email, password } = req.body ?? {};
+    if (
+      typeof name !== 'string'
+      || !name.trim()
+      || name.trim().length > 100
+      || !isValidAdminEmail(email)
+      || typeof password !== 'string'
+      || password.length < 12
+      || password.length > 128
+    ) {
+      return res.status(400).json({ success: false, message: 'Provide a name, valid email, and password between 12 and 128 characters.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (await Admin.exists({ email: normalizedEmail })) {
+      return res.status(409).json({ success: false, message: 'An account already exists with this email.' });
+    }
+
+    const admin = await Admin.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: await bcrypt.hash(password, 12),
+      role: 'admin',
+      department: 'Administration',
+    });
+    return res.status(201).json({ success: true, data: serializeAdmin(admin) });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: 'An account already exists with this email.' });
+    }
+    console.error('Create administrator error:', error);
+    return res.status(500).json({ success: false, message: 'Could not create the administrator account.' });
+  }
+};
+
+export const resetAdministratorPassword = async (req, res) => {
+  try {
+    const { email, newPassword, currentPassword } = req.body ?? {};
+    if (
+      !isValidAdminEmail(email)
+      || typeof newPassword !== 'string'
+      || newPassword.length < 12
+      || newPassword.length > 128
+      || typeof currentPassword !== 'string'
+      || !currentPassword
+    ) {
+      return res.status(400).json({ success: false, message: 'Provide a valid admin email, current superadmin password, and new password between 12 and 128 characters.' });
+    }
+
+    const superadmin = await Admin.findById(req.admin._id).select('+password');
+    if (!superadmin || !superadmin.isActive) {
+      return res.status(401).json({ success: false, message: 'The superadmin account is unavailable.' });
+    }
+    if (!await bcrypt.compare(currentPassword, superadmin.password)) {
+      return res.status(401).json({ success: false, message: 'The current superadmin password is incorrect.' });
+    }
+
+    const admin = await Admin.findOne({
+      email: email.trim().toLowerCase(),
+      role: 'admin',
+    }).select('+password');
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin account not found.' });
+    }
+
+    admin.password = await bcrypt.hash(newPassword, 12);
+    admin.authVersion = (admin.authVersion ?? 0) + 1;
+    admin.resetCode = undefined;
+    admin.resetCodeExpires = undefined;
+    await admin.save();
+
+    return res.json({ success: true, data: { admin: serializeAdmin(admin) } });
+  } catch (error) {
+    console.error('Reset administrator password error:', error);
+    return res.status(500).json({ success: false, message: 'Could not reset the administrator password.' });
   }
 };
 

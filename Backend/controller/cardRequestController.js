@@ -351,8 +351,9 @@ export const updateGiftCard = async (req, res) => {
   if (payout !== undefined && (!Number.isFinite(payout) || payout < 0)) {
     return res.status(400).json({ success: false, message: 'Provide a valid naira payout amount.' });
   }
-  const session = await mongoose.startSession();
+  let session;
   try {
+    session = await mongoose.startSession();
     if (req.admin?.role === 'staff') {
       const assignedTask = await AdminTask.exists({
         assignedTo: req.admin._id,
@@ -373,6 +374,11 @@ export const updateGiftCard = async (req, res) => {
         return;
       }
       if (payout !== undefined) trade.ngnAmount = payout;
+      if (status === 'successful' && !trade.user) {
+        const error = new Error('This trade is not linked to a customer account and cannot be credited.');
+        error.statusCode = 409;
+        throw error;
+      }
       const owner = trade.user
         ? await User.findById(trade.user).select('referrer walletBalance walletCurrency').session(session)
         : null;
@@ -487,7 +493,7 @@ export const updateGiftCard = async (req, res) => {
     console.error('Update Gift Card Error:', err);
     return res.status(500).json({ success: false, message: 'Could not review this gift card trade.' });
   } finally {
-    await session.endSession();
+    if (session) await session.endSession();
   }
 };
 

@@ -16,18 +16,20 @@ import {
     getAdminOverview,
     getAdminProfile,
     getAdminWithdrawalAudit,
+    createAdministrator,
     getWithdrawalPasskeyStatus,
     listAdminWithdrawals,
     listStaff,
     listTasks,
     reverseAdminWalletFunding,
     reviewWithdrawal,
+    resetAdministratorPassword,
     setWithdrawalPasskey,
     verifyWithdrawalPasskey,
     updateStaff,
     updateTask,
 } from '../controller/adminOperationsController.js';
-import { authenticateAdmin, requireAdminPermission, requireAdministrator, requireWithdrawalPasskey } from '../middleware/authenticateAdmin.js';
+import { authenticateAdmin, requireAdminPermission, requireAdministrator, requireSuperadmin, requireWithdrawalPasskey } from '../middleware/authenticateAdmin.js';
 import { listAdminVirtualNumberTransactions } from '../controller/virtualNumberController.js';
 import { clockInStaff, clockOutStaff, getMyStaffAttendance, listStaffAttendance } from '../controller/staffAttendanceController.js';
 import { listAdminSupportRequests, updateAdminSupportRequest } from '../controller/supportRequestController.js';
@@ -51,6 +53,8 @@ adminRoute.put('/feature-settings', requireAdministrator, updateFeatureSettings)
 adminRoute.get('/withdrawal-passkey', requireAdministrator, getWithdrawalPasskeyStatus);
 adminRoute.post('/withdrawal-passkey/verify', requireAdministrator, verifyWithdrawalPasskey);
 adminRoute.put('/withdrawal-passkey', requireAdministrator, setWithdrawalPasskey);
+adminRoute.post('/administrators', requireSuperadmin, requireWithdrawalPasskey, createAdministrator);
+adminRoute.post('/administrators/reset-password', requireSuperadmin, resetAdministratorPassword);
 adminRoute.put('/update/:id', updateAdmin);
 adminRoute.get('/overview', requireAdminPermission('Overview'), getAdminOverview);
 adminRoute.get('/wallet', requireAdminPermission('Admin Wallet'), getAdminWalletDashboard);

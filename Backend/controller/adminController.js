@@ -66,7 +66,11 @@ export const signUp = async (req, res) => {
     });
     await newAdmin.save();
 
-    const token = jwt.sign({ id: newAdmin._id, type: 'admin' }, jwtSecret, { expiresIn: '8h' });
+    const token = jwt.sign(
+      { id: newAdmin._id, type: 'admin', authVersion: newAdmin.authVersion ?? 0 },
+      jwtSecret,
+      { expiresIn: '8h' },
+    );
     return res.status(201).json({ success: true, message: 'Superadmin created successfully.', token, admin: safeAdmin(newAdmin) });
   } catch (error) {
     console.error('Admin signup error:', error);
@@ -88,7 +92,7 @@ export const signIn = async (req, res) => {
     if (!isMatch) return res.status(401).json({ success: false, message: 'Invalid email or password.' });
 
     const token = jwt.sign(
-      { id: admin._id, type: 'admin' },
+      { id: admin._id, type: 'admin', authVersion: admin.authVersion ?? 0 },
       jwtSecret,
       { expiresIn: '8h' }
     );
@@ -112,6 +116,7 @@ export const updateAdmin = async (req, res) => {
     if (typeof req.body.phone === 'string') updates.phone = req.body.phone.trim();
     if (typeof req.body.password === 'string' && req.body.password.length >= 12) {
       updates.password = await bcrypt.hash(req.body.password, 12);
+      updates.authVersion = (req.admin.authVersion ?? 0) + 1;
     } else if (req.body.password !== undefined) {
       return res.status(400).json({ success: false, message: 'Password must be at least 12 characters.' });
     }
@@ -213,6 +218,7 @@ export const resetAdminPasswordWithCode = async (req, res) => {
 
     // Hash new password
     admin.password = await bcrypt.hash(newPassword, 12);
+    admin.authVersion = (admin.authVersion ?? 0) + 1;
 
     // Clear code and expiry
     admin.resetCode = undefined;

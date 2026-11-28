@@ -457,7 +457,7 @@ export const googleSignIn = async (req, res) => {
 };
 
 export const appleSignIn = async (req, res) => {
-  const { idToken, name } = req.body;
+  const { idToken, name, referralCode } = req.body;
   const appleBundleId = process.env.APPLE_BUNDLE_ID || 'com.ios.cardzip';
   if (!getJwtSecret() || !appleBundleId) {
     return res.status(503).json({ success: false, message: 'Apple sign-in is not configured on the server.' });
@@ -497,12 +497,18 @@ export const appleSignIn = async (req, res) => {
       if (!email || !emailIsVerified) {
         return res.status(401).json({ success: false, message: 'Apple did not provide a verified email for this account.' });
       }
+      let referrer = null;
+      if (typeof referralCode === 'string' && referralCode.trim()) {
+        referrer = await User.findOne({ referralCode: referralCode.trim().toUpperCase() }).select('_id');
+        if (!referrer) return res.status(400).json({ success: false, message: 'This referral link is invalid or expired.' });
+      }
       user = await User.create({
         name: String(name || email.split('@')[0]).trim().slice(0, 100),
         email,
         password: await bcrypt.hash(randomUUID(), 12),
         appleSub: claims.sub,
         referralCode: generateReferralCode(),
+        referrer: referrer?._id || null,
       });
     }
 
